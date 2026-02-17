@@ -158,3 +158,5 @@ toolchain/*
 drivers/kernelsu/*
 
 
+Apollo/out/
+*.bak
