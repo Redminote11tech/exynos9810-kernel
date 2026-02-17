@@ -766,6 +766,9 @@ static int panel_set_brightness(struct backlight_device *bd)
 	int ret = 0;
 	int id, brightness = bd->props.brightness;
 	struct panel_bl_device *panel_bl = bl_get_data(bd);
+	/* Scale 0-255 (OneUI 7) to 0-44800 (panel driver range) */
+	if (bd->props.max_brightness > 255 && brightness <= 255)
+		brightness = brightness * bd->props.max_brightness / 255;
 	struct panel_device *panel = to_panel_device(panel_bl);
 
 	mutex_lock(&panel_bl->lock);
