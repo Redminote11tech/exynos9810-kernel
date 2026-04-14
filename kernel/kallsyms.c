@@ -670,6 +670,7 @@ static int s_show(struct seq_file *m, void *p)
 
 	value = iter->show_value ? iter->value : 0;
 
+	#ifndef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
 	if (iter->module_name[0]) {
 		char type;
 
@@ -684,6 +685,27 @@ static int s_show(struct seq_file *m, void *p)
 	} else
 		seq_printf(m, KALLSYM_FMT " %c %s\n", value,
 			   iter->type, iter->name);
+#else
+	{
+		if (strstr(iter->name, "ksu_") || !strncmp(iter->name, "susfs_", 6) || !strncmp(iter->name, "ksud", 4)) {
+			return 0;
+		}
+		if (iter->module_name[0]) {
+			char type;
+
+			/*
+			 * Label it "global" if it is exported,
+			 * "local" if not exported.
+			 */
+			type = iter->exported ? toupper(iter->type) :
+						tolower(iter->type);
+			seq_printf(m, KALLSYM_FMT " %c %s\t[%s]\n", value,
+				   type, iter->name, iter->module_name);
+		} else
+			seq_printf(m, KALLSYM_FMT " %c %s\n", value,
+				   iter->type, iter->name);
+	}
+#endif
 	return 0;
 }
 

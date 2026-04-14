@@ -40,7 +40,7 @@ CR_DTB=$CR_DIR/arch/$CR_ARCH/boot/dtb.img
 # defconfig dir
 CR_DEFCONFIG=$CR_DIR/arch/$CR_ARCH/configs
 # Kernel Name and Version
-CR_VERSION=V1.11
+CR_VERSION=V2.0
 CR_NAME=DS-ACK
 # Thread count
 CR_JOBS=$(nproc --all)
@@ -560,21 +560,23 @@ CR_BASE_KERNEL=$CR_OUTZIP/floyd/G960F-kernel
 CR_BASE_DTB=$CR_OUTZIP/floyd/G960F-dtb
 
 # Check packages
-if ! dpkg-query -W -f='${Status}' bsdiff  | grep "ok installed"; then 
-	echo "bsdiff is missing and is required for ZIP Packaging."
-	read -p "Do you want to install bsdiff? This requires sudo privileges. (y/n) > " INSTALL_BSDIFF
-	if [ "$INSTALL_BSDIFF" = "y" ]; then
-		echo "installing bsdiff."
-		sudo apt update
-		sudo apt install -y bsdiff
-		if ! dpkg-query -W -f='${Status}' bsdiff | grep "ok installed"; then
-			echo "Failed to install bsdiff. Please try installing it manually."
-			exit 0;
-		fi
-	else
-		echo "Please install bsdiff with sudo apt install bsdiff and try again."
-		exit 0;
-	fi
+if ! command -v bsdiff >/dev/null 2>&1; then 
+        echo "bsdiff is missing and is required for ZIP Packaging."
+        read -p "Do you want to install bsdiff? This requires sudo privileges. (y/n) > " INSTALL_BSDIFF
+        if [ "$INSTALL_BSDIFF" = "y" ]; then
+                echo "installing bsdiff."
+                if command -v dnf >/dev/null; then sudo dnf install -y bsdiff;
+                elif command -v apt >/dev/null; then sudo apt update && sudo apt install -y bsdiff;
+                elif command -v pacman >/dev/null; then sudo pacman -S --noconfirm bsdiff;
+                fi
+                if ! command -v bsdiff >/dev/null 2>&1; then
+                        echo "Failed to install bsdiff. Please try installing it manually."
+                        exit 0;
+                fi
+        else
+                echo "Please install bsdiff manually and try again."
+                exit 0;
+        fi
 fi
 
 # Initalize with base image (Starlte)
