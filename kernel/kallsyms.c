@@ -577,7 +577,7 @@ static int get_ksymbol_mod(struct kallsym_iter *iter)
 
 static int get_ksymbol_bpf(struct kallsym_iter *iter)
 {
-	iter->module_name[0] = '\0';
+	strlcpy(iter->module_name, "bpf", MODULE_NAME_LEN);
 	iter->exported = 0;
 	return bpf_get_kallsym(iter->pos - iter->pos_mod_end,
 			       &iter->value, &iter->type,
@@ -661,16 +661,18 @@ static void s_stop(struct seq_file *m, void *p)
 
 static int s_show(struct seq_file *m, void *p)
 {
-	unsigned long value;
 	struct kallsym_iter *iter = m->private;
 
 	/* Some debugging symbols have no name.  Ignore them. */
 	if (!iter->name[0])
 		return 0;
 
-	value = iter->show_value ? iter->value : 0;
-
-	#ifndef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+#ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+	if (strstr(iter->name, "ksu_") ||
+	    !strncmp(iter->name, "susfs_", 6) ||
+	    !strncmp(iter->name, "ksud", 4))
+		return 0;
+#endif
 	if (iter->module_name[0]) {
 		char type;
 
@@ -680,32 +682,11 @@ static int s_show(struct seq_file *m, void *p)
 		 */
 		type = iter->exported ? toupper(iter->type) :
 					tolower(iter->type);
-		seq_printf(m, KALLSYM_FMT " %c %s\t[%s]\n", value,
+		seq_printf(m, "%pK %c %s\t[%s]\n", (void *)iter->value,
 			   type, iter->name, iter->module_name);
 	} else
-		seq_printf(m, KALLSYM_FMT " %c %s\n", value,
+		seq_printf(m, "%pK %c %s\n", (void *)iter->value,
 			   iter->type, iter->name);
-#else
-	{
-		if (strstr(iter->name, "ksu_") || !strncmp(iter->name, "susfs_", 6) || !strncmp(iter->name, "ksud", 4)) {
-			return 0;
-		}
-		if (iter->module_name[0]) {
-			char type;
-
-			/*
-			 * Label it "global" if it is exported,
-			 * "local" if not exported.
-			 */
-			type = iter->exported ? toupper(iter->type) :
-						tolower(iter->type);
-			seq_printf(m, KALLSYM_FMT " %c %s\t[%s]\n", value,
-				   type, iter->name, iter->module_name);
-		} else
-			seq_printf(m, KALLSYM_FMT " %c %s\n", value,
-				   iter->type, iter->name);
-	}
-#endif
 	return 0;
 }
 

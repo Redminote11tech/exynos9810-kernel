@@ -136,3 +136,4 @@ obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
 obj-$(CONFIG_KSU_SUSFS) += susfs.o
 obj-$(CONFIG_KSU_SUSFS_SUS_SU) += sus_su.o
+obj-$(CONFIG_EROFS_FS)		+= erofs/
