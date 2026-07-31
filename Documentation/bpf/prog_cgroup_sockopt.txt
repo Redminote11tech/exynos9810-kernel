@@ -87,7 +87,6 @@ then the next program in the chain (A) will see those changes,
 modified values will be then passed down to the kernel.
 
 Example
-=======
 
 See ``tools/testing/selftests/bpf/progs/sockopt_sk.c`` for an example
 of BPF program that handles socket options.
