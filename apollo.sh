@@ -242,8 +242,11 @@ BUILD_IMAGE_NAME()
 # Build options
 BUILD_OPTIONS()
 {
-	# KSU Version
-	KSU_VERSION=$( [ -f "drivers/kernelsu/Makefile" ] && grep -oP '(?<=-DKSU_VERSION=)[0-9]+' drivers/kernelsu/Makefile )
+	# KSU Version - derived the same way as drivers/kernelsu/Kbuild
+	# (30000 + git rev-list count + 150), since the version is a build-time
+	# ccflags-y value, not stored in Makefile.
+	KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
+	[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 150 ))
 	echo "----------------------------------------------"
 	echo " Apollo Kernel Build Options "
 	echo " "
@@ -313,7 +316,10 @@ BUILD_GENERATE_CONFIG()
   if [[ "$CR_KSU" =~ ^[yY]$ ]]; then
     echo " Building KernelSU"
     echo "CONFIG_KSU=y" >> $CR_DEFCONFIG/tmp_defconfig
-    echo "CONFIG_KSU_WITH_KPROBES=n" >> $CR_DEFCONFIG/tmp_defconfig
+    # KSU-Next needs an explicit hook mode or Kbuild aborts with "No hooks were
+    # defined". The export at the top of this script satisfies the Kbuild check;
+    # this makes the symbol real in .config for every variant, not just starlte.
+    echo "CONFIG_KSU_MANUAL_HOOK=y" >> $CR_DEFCONFIG/tmp_defconfig
     CR_IMAGE_NAME=$CR_IMAGE_NAME-KSU
     zver=$zver-KernelSU
   else
@@ -327,8 +333,11 @@ BUILD_GENERATE_CONFIG()
 # Kernel information Function
 BUILD_OUT()
 {
-# KSU Version
-	KSU_VERSION=$( [ -f "drivers/kernelsu/Makefile" ] && grep -oP '(?<=-DKSU_VERSION=)[0-9]+' drivers/kernelsu/Makefile )
+# KSU Version - derived the same way as drivers/kernelsu/Kbuild
+# (30000 + git rev-list count + 150), since the version is a build-time
+# ccflags-y value, not stored in Makefile.
+	KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
+	[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 150 ))
   echo "----------------------------------------------"
   echo " Kernel		- $CR_IMAGE_NAME"
   echo " Device		- $CR_VARIANT"
