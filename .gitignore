@@ -157,6 +157,9 @@ toolchain/*
 # kernelsu
 drivers/kernelsu/*
 
+# local build logs
+logs/
+
 
 Apollo/out/
 *.bak
