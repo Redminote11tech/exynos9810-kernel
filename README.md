@@ -33,8 +33,9 @@ be — this is an Exynos tree.
 - **eBPF:** BPF verifier, cgroup-bpf and sockmap infrastructure backported from
   upstream Apollo, for userspace that expects a newer BPF surface.
 - **Display:** driver-level brightness scaling fix for One UI 7.
-- **SELinux:** both Enforcing and Permissive builds are produced; Enforcing is
-  the default. See [Which build to pick](#which-build-to-pick).
+- **SELinux Enforcing:** fully supported and the default — root via KernelSU-Next
+  works with SELinux left enforcing. Permissive is still built and shipped for
+  when you need it. See [SELinux modes](#selinux-modes).
 - **One installer:** a single ZIP carries all three devices — the S9 image plus
   bsdiff patches for S9+ and Note 9 — and picks the right one at flash time.
 
@@ -60,9 +61,32 @@ Each release ships four ZIPs, from two independent choices:
 | **KernelSU** | Root, SELinux intact. **Start here.** | Root, SELinux off |
 | **No KernelSU** | Clean kernel | SELinux off, no root |
 
-Permissive disables SELinux enforcement device-wide. It fixes some misbehaving
-modules and ROM combinations, but it is a real reduction in your device's
-security — only reach for it if an Enforcing build actually fails you.
+### SELinux modes
+
+**Enforcing is the default and is fully supported.** Rooting this kernel does
+not require turning SELinux off: KernelSU-Next and SUSFS both work with
+enforcement left on, and that is the build you should be running. Verify after
+flashing with:
+
+```
+adb shell getenforce      # -> Enforcing
+```
+
+**Permissive** is a separate build, selected at compile time by
+`CONFIG_ALWAYS_PERMISSIVE`. That option makes the kernel clamp every write to
+`/sys/fs/selinux/enforce` to `0`, so the device cannot be put back into
+enforcing mode at runtime — not even by an app or script that asks nicely. It
+exists for diagnosing a misbehaving module or ROM combination, and it is a real,
+device-wide reduction in security. Reach for it only when an Enforcing build
+actually fails you, and go back afterwards.
+
+Enforcing builds simply don't set that option, so SELinux behaves exactly as the
+ROM intends.
+
+> Every image has `SEANDROIDENFORCE` appended, Permissive ones included. That is
+> a marker the Samsung bootloader looks for to suppress the red boot warning —
+> it has nothing to do with which SELinux mode the kernel runs in. Don't read it
+> as proof you're on an Enforcing build; use `getenforce`.
 
 ## Building from source
 
@@ -84,7 +108,8 @@ Already cloned without it?
 git submodule update --init --recursive
 ```
 
-`apollo.sh` prompts for device, compiler, SELinux mode, KernelSU and clean/dirty,
+`apollo.sh` prompts for device, compiler, SELinux mode (defaults to Enforcing),
+KernelSU and clean/dirty,
 then drops a flashable ZIP in `Apollo/Product`. Option **7** builds the
 all-device ZIP; option **8** builds the four release ZIPs in one run.
 
@@ -144,8 +169,9 @@ call site, the build stops with *"No hooks were defined"*.
 
 - **No V3.2.0 release is published yet.** The Releases page currently tops out
   at V2.0; this README documents the source tree.
-- Permissive builds disable SELinux device-wide — deliberate, but understand the
-  tradeoff before flashing one.
+- Permissive builds disable SELinux device-wide and cannot be switched back to
+  enforcing at runtime — deliberate, but flash the Enforcing build unless you
+  have a specific reason not to.
 
 <!-- Add device-level issues here as they're reported: what's broken, on which
      variant, and whether there's a workaround. -->
