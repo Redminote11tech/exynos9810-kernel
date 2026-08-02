@@ -92,6 +92,31 @@ all-device ZIP; option **8** builds the four release ZIPs in one run.
 > patches for the others, so it only comes out of options 7 and 8. Building a
 > single non-`starlte` target gives you an image, not a universal package.
 
+#### Output layout and parallel builds
+
+Builds are out-of-tree. Each target compiles into its own directory under
+`out/`, named `<variant>-<selinux>-<ksu>`, e.g. `out/G960F-enforcing-ksu`. The
+source tree stays clean, and because no two targets share a `.config` or an
+object file, multi-target builds compile several devices at once:
+
+```bash
+CR_PARALLEL=3 ./apollo.sh      # 3 devices at a time
+```
+
+Each concurrent build gets `nproc / CR_PARALLEL` make jobs, so total thread
+count stays constant. The default is 2 — keep it low, since ThinLTO linking is
+memory hungry and several simultaneous links will swap a 16 GB machine. Compiles
+run in parallel; packaging always runs sequentially afterwards. Per-target
+output goes to `logs/build-<pid>/target-N.log`.
+
+Because each target keeps its own output dir, a rebuild after changing one
+device (or just flipping SELinux mode) is incremental instead of a full rebuild.
+
+> **Coming from an older checkout:** kbuild refuses out-of-tree builds while the
+> source tree still holds in-tree build output. `apollo.sh` detects this and
+> tells you; the one-time fix is
+> `make ARCH=arm64 mrproper && rm -f KernelSU-Next/kernel/*.o KernelSU-Next/kernel/*/*.o`.
+
 ### The KernelSU-Next submodule
 
 The submodule tracks [`Redminote11tech/KernelSU-Next`](https://github.com/Redminote11tech/KernelSU-Next),

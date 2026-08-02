@@ -141,6 +141,7 @@ Apollo/Out/kernelzip/*
 Apollo/Product/*.img
 Apollo/Product/*.zip
 arch/arm64/configs/tmp_defconfig
+arch/arm64/configs/tmp_*_defconfig
 drivers/gator_5.27/generated_gator_src_md5.h
 scripts/crypto/__pycache__/*
 scripts/fmp/__pycache__/*
@@ -159,6 +160,9 @@ drivers/kernelsu/*
 
 # local build logs
 logs/
+
+# per-target kbuild output dirs (make O=)
+out/
 
 
 Apollo/out/

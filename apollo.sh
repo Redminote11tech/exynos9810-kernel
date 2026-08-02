@@ -33,10 +33,12 @@ CR_OUTZIP=$CR_OUT/kernelzip
 CR_AIK=$CR_DIR/Apollo/A.I.K
 # Main Ramdisk Location
 CR_RAMDISK=$CR_DIR/Apollo/Ramdisk
-# Compiled image name and location (Image/zImage)
-CR_KERNEL=$CR_DIR/arch/$CR_ARCH/boot/Image
-# Compiled dtb by dtbtool
-CR_DTB=$CR_DIR/arch/$CR_ARCH/boot/dtb.img
+# Root for per-target kbuild output dirs (make O=...). Each target builds into
+# its own tree, so targets never share a .config or object file and can run
+# concurrently. CR_KERNEL/CR_DTB are set per target by BUILD_TARGET_ID.
+CR_OUT_ROOT=$CR_DIR/out
+CR_KERNEL=
+CR_DTB=
 # defconfig dir
 CR_DEFCONFIG=$CR_DIR/arch/$CR_ARCH/configs
 # Kernel Name and Version
@@ -45,6 +47,12 @@ CR_NAME=DS-ACK
 # Thread count. Plain nproc respects CPU affinity and cgroup limits;
 # --all ignores both and oversubscribes in containers or under taskset.
 CR_JOBS=$(nproc)
+# How many device targets to compile at once during a multi-target build.
+# Each concurrent build gets CR_JOBS/CR_PARALLEL make jobs, so the total thread
+# count stays at CR_JOBS. Keep this low: ThinLTO linking is memory hungry and
+# several concurrent links will swap a 16 GB machine to death. Override with
+# CR_PARALLEL=n ./apollo.sh
+CR_PARALLEL=${CR_PARALLEL:-2}
 # Target Android version
 CR_ANDROID=q
 CR_PLATFORM=13.0.0
@@ -211,28 +219,56 @@ compile="make ARCH=arm64 CC=clang"
 CR_COMPILER_ARG="$CR_CLANG"
 }
 
+# Out-of-tree builds refuse to run if the source tree still holds output from
+# an older in-tree build. Detect that once, up front, with the fix spelled out,
+# rather than letting kbuild fail in the middle of a six-target run.
+BUILD_CHECK_SRCTREE()
+{
+	if [ -e $CR_DIR/.config ] || [ -e $CR_DIR/built-in.o ] || [ -e $CR_DIR/vmlinux.o ]; then
+		echo "----------------------------------------------"
+		echo " This tree contains output from an older in-tree build."
+		echo " apollo.sh now builds out-of-tree (make O=), which kbuild"
+		echo " refuses to do until the source tree is clean."
+		echo " "
+		echo " Run this once, then build again:"
+		echo " "
+		echo "     make ARCH=arm64 mrproper"
+		echo "     rm -f KernelSU-Next/kernel/*.o KernelSU-Next/kernel/*/*.o"
+		echo " "
+		echo " Your out/ directories and Apollo/Product are not affected."
+		echo "----------------------------------------------"
+		exit 1;
+	fi
+}
+
+# Per-target identity: output dir, artifact paths and defconfig name.
+# Every target gets its own kbuild output tree and its own generated defconfig,
+# which is what makes concurrent builds safe.
+BUILD_TARGET_ID()
+{
+	local sel ksu
+	if [ "$CR_SELINUX" = "1" ]; then sel=permissive; else sel=enforcing; fi
+	if [[ "$CR_KSU" =~ ^[yY]$ ]]; then ksu=ksu; else ksu=noksu; fi
+	CR_TAG=$CR_VARIANT-$sel-$ksu
+	CR_OUTDIR=$CR_OUT_ROOT/$CR_TAG
+	CR_TMPCONFIG=tmp_${CR_TAG}_defconfig
+	CR_KERNEL=$CR_OUTDIR/arch/$CR_ARCH/boot/Image
+	CR_DTB=$CR_OUTDIR/arch/$CR_ARCH/boot/dtb.img
+}
+
 # Clean-up Function
+#
+# With out-of-tree builds a clean is just removing the target's output dir, so
+# it no longer disturbs other targets or the source tree. Dirty builds keep the
+# output dir and let kbuild do incremental work, which is the whole point of
+# giving each target its own.
 
 BUILD_CLEAN()
 {
 if [[ "$CR_CLEAN" =~ ^[yY]$ ]]; then
-     $compile clean && $compile mrproper
-     rm -r -f $CR_DTB
-     rm -r -f $CR_KERNEL
-     rm -rf $CR_DTS/.*.tmp
-     rm -rf $CR_DTS/.*.cmd
-     rm -rf $CR_DTS/*.dtb
-     rm -rf $CR_DIR/.config
+     rm -rf $CR_OUTDIR
      rm -rf $CR_OUT/*.img
      rm -rf $CR_OUT/*.zip
-else
-     rm -r -f $CR_DTB
-     rm -r -f $CR_KERNEL
-     rm -rf $CR_DTS/.*.tmp
-     rm -rf $CR_DTS/.*.cmd
-     rm -rf $CR_DTS/*.dtb
-     rm -rf $CR_DIR/.config
-     rm -rf $CR_DIR/.version
 fi
 }
 
@@ -291,29 +327,29 @@ BUILD_GENERATE_CONFIG()
   echo " "
   # Respect CLEAN build rules
   BUILD_CLEAN
-  if [ -e $CR_DEFCONFIG/tmp_defconfig ]; then
+  if [ -e $CR_DEFCONFIG/$CR_TMPCONFIG ]; then
     echo " Clean-up old config "
-    rm -rf $CR_DEFCONFIG/tmp_defconfig
+    rm -rf $CR_DEFCONFIG/$CR_TMPCONFIG
   fi
   echo " Base	- $CR_CONFIG "
-  cp -f $CR_DEFCONFIG/$CR_CONFIG $CR_DEFCONFIG/tmp_defconfig
+  cp -f $CR_DEFCONFIG/$CR_CONFIG $CR_DEFCONFIG/$CR_TMPCONFIG
   # Split-config support for devices with unified defconfigs (Universal + device)
   if [ $CR_CONFIG_SPLIT = NULL ]; then
     echo " No split config support! "
   else
     echo " Device - $CR_CONFIG_SPLIT "
-    cat $CR_DEFCONFIG/$CR_CONFIG_SPLIT >> $CR_DEFCONFIG/tmp_defconfig
+    cat $CR_DEFCONFIG/$CR_CONFIG_SPLIT >> $CR_DEFCONFIG/$CR_TMPCONFIG
   fi
   # Regional Config
   echo " Region	- $CR_CONFIG_REGION "
-  cat $CR_DEFCONFIG/$CR_CONFIG_REGION >> $CR_DEFCONFIG/tmp_defconfig
+  cat $CR_DEFCONFIG/$CR_CONFIG_REGION >> $CR_DEFCONFIG/$CR_TMPCONFIG
   # Apollo Custom defconfig
   echo " Apollo	- $CR_CONFIG_APOLLO "
-  cat $CR_DEFCONFIG/$CR_CONFIG_APOLLO >> $CR_DEFCONFIG/tmp_defconfig
+  cat $CR_DEFCONFIG/$CR_CONFIG_APOLLO >> $CR_DEFCONFIG/$CR_TMPCONFIG
   # Selinux Never Enforce all targets
   if [ $CR_SELINUX = "1" ]; then
     echo " Building SELinux Permissive Kernel"
-    echo "CONFIG_ALWAYS_PERMISSIVE=y" >> $CR_DEFCONFIG/tmp_defconfig
+    echo "CONFIG_ALWAYS_PERMISSIVE=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
     CR_IMAGE_NAME=$CR_IMAGE_NAME-Permissive
     zver=$zver-Permissive
   else
@@ -321,19 +357,19 @@ BUILD_GENERATE_CONFIG()
   fi
   if [[ "$CR_KSU" =~ ^[yY]$ ]]; then
     echo " Building KernelSU"
-    echo "CONFIG_KSU=y" >> $CR_DEFCONFIG/tmp_defconfig
+    echo "CONFIG_KSU=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
     # KSU-Next needs an explicit hook mode or Kbuild aborts with "No hooks were
     # defined". The export at the top of this script satisfies the Kbuild check;
     # this makes the symbol real in .config for every variant, not just starlte.
-    echo "CONFIG_KSU_MANUAL_HOOK=y" >> $CR_DEFCONFIG/tmp_defconfig
+    echo "CONFIG_KSU_MANUAL_HOOK=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
     CR_IMAGE_NAME=$CR_IMAGE_NAME-KSU
     zver=$zver-KernelSU
   else
-    echo "# CONFIG_KSU is not set" >> $CR_DEFCONFIG/tmp_defconfig
+    echo "# CONFIG_KSU is not set" >> $CR_DEFCONFIG/$CR_TMPCONFIG
   fi
   echo " $CR_VARIANT config generated "
   echo " "
-  CR_CONFIG=tmp_defconfig
+  CR_CONFIG=$CR_TMPCONFIG
 }
 
 # Kernel information Function
@@ -376,14 +412,15 @@ BUILD_ZIMAGE()
 	echo " "
 	echo "Building zImage for $CR_VARIANT"
 	export LOCALVERSION=-$CR_IMAGE_NAME
+	mkdir -p $CR_OUTDIR
 	echo "Make $CR_CONFIG"
-	if ! $compile $CR_CONFIG; then
+	if ! $compile O=$CR_OUTDIR $CR_CONFIG; then
 		echo "Failed to generate .config from $CR_CONFIG"
 		echo " Abort "
 		exit 1;
 	fi
-	echo "Make Kernel with $CR_COMPILER_ARG"
-	if ! $compile -j$CR_JOBS; then
+	echo "Make Kernel with $CR_COMPILER_ARG ($CR_MAKE_JOBS jobs)"
+	if ! $compile O=$CR_OUTDIR -j$CR_MAKE_JOBS; then
 		echo "Image Failed to Compile"
 		echo " Abort "
 		exit 1;
@@ -393,9 +430,7 @@ BUILD_ZIMAGE()
 		echo " Abort "
 		exit 1;
 	fi
-	du -k "$CR_KERNEL" | cut -f1 >sizT
-	sizT=$(head -n 1 sizT)
-	rm -rf sizT
+	sizT=$(du -k "$CR_KERNEL" | cut -f1)
 	echo " "
 	echo "----------------------------------------------"
 }
@@ -414,12 +449,7 @@ BUILD_DTB()
 	else
         echo "DTB Compiled at $CR_DTB"
 	fi
-	rm -rf $CR_DTS/.*.tmp
-	rm -rf $CR_DTS/.*.cmd
-	rm -rf $CR_DTS/*.dtb
-	du -k "$CR_DTB" | cut -f1 >sizdT
-	sizdT=$(head -n 1 sizdT)
-	rm -rf sizdT
+	sizdT=$(du -k "$CR_DTB" | cut -f1)
 	echo " "
 	echo "----------------------------------------------"
 }
@@ -454,18 +484,27 @@ PACK_BOOT_IMG()
         mkdir $CR_OUT
 	fi
 	mv $CR_AIK/image-new.img $CR_OUT/$CR_IMAGE_NAME.img
-	du -k "$CR_OUT/$CR_IMAGE_NAME.img" | cut -f1 >sizkT
-	sizkT=$(head -n 1 sizkT)
-	rm -rf sizkT
+	sizkT=$(du -k "$CR_OUT/$CR_IMAGE_NAME.img" | cut -f1)
 	echo " "
 	$CR_AIK/cleanup.sh
 	# Respect CLEAN build rules
 	BUILD_CLEAN
 }
 
-# Single Target Build Function
-BUILD()
+# Map a numeric target onto its device, configs and machine symbol.
+# Split out of BUILD so the parallel driver can resolve a target's identity
+# without compiling it.
+BUILD_SELECT_TARGET()
 {
+	# arch/arm64/boot/dts/Makefile keys dtb-y off these, and they come from the
+	# environment rather than .config. Clear all six before selecting one, or a
+	# leftover from an earlier target makes dtb.img contain the wrong devices.
+	unset CONFIG_MACH_EXYNOS9810_STARLTE_EUR_OPEN
+	unset CONFIG_MACH_EXYNOS9810_STAR2LTE_EUR_OPEN
+	unset CONFIG_MACH_EXYNOS9810_CROWNLTE_EUR_OPEN
+	unset CONFIG_MACH_EXYNOS9810_STARLTE_KOR
+	unset CONFIG_MACH_EXYNOS9810_STAR2LTE_KOR
+	unset CONFIG_MACH_EXYNOS9810_CROWNLTE_KOR
 	if [ "$CR_TARGET" = "1" ]; then
 		echo " Galaxy S9 INTL"
 		CR_CONFIG_SPLIT=$CR_CONFIG_G960
@@ -509,9 +548,17 @@ BUILD()
 		CR_CONFIG_REGION=$CR_CONFIG_KOR
 		CR_VARIANT=$CR_VARIANT_N960N
 		export "CONFIG_MACH_EXYNOS9810_CROWNLTE_KOR=y"
-	fi	
+	fi
 	CR_CONFIG=$CR_CONFIG_9810
-	BUILD_COMPILER
+	BUILD_TARGET_ID
+}
+
+# Compile one target into its own output dir. Safe to run concurrently with
+# other targets: nothing outside $CR_OUTDIR and the target's own defconfig is
+# written, and the CONFIG_MACH_* export stays inside this shell.
+BUILD_COMPILE_ONE()
+{
+	BUILD_SELECT_TARGET
 	BUILD_CLEAN
 	BUILD_IMAGE_NAME
 	BUILD_GENERATE_CONFIG
@@ -519,37 +566,104 @@ BUILD()
 	BUILD_OPTIONS
 	BUILD_ZIMAGE
 	BUILD_DTB
+}
+
+# Turn one already-compiled target into a boot.img or fold it into the ZIP.
+# Always sequential: A.I.K and the ZIP staging dir are shared state.
+BUILD_PACKAGE_ONE()
+{
+	BUILD_SELECT_TARGET
+	BUILD_IMAGE_NAME
+	# Re-apply the name suffixes BUILD_GENERATE_CONFIG would have added, without
+	# regenerating the defconfig.
+	if [ "$CR_SELINUX" = "1" ]; then
+		CR_IMAGE_NAME=$CR_IMAGE_NAME-Permissive
+		zver=$zver-Permissive
+	fi
+	if [[ "$CR_KSU" =~ ^[yY]$ ]]; then
+		CR_IMAGE_NAME=$CR_IMAGE_NAME-KSU
+		zver=$zver-KernelSU
+	fi
 	if [ "$CR_MKZIP" = "y" ]; then # Allow Zip Package for mass compile only
-	echo " Start Build ZIP Process "
-	PACK_KERNEL_ZIP
+		echo " Start Build ZIP Process "
+		PACK_KERNEL_ZIP
 	else
-	PACK_BOOT_IMG
-	BUILD_OUT
+		PACK_BOOT_IMG
+		BUILD_OUT
 	fi
 }
 
+# Single Target Build Function
+BUILD()
+{
+	BUILD_COMPILER
+	CR_MAKE_JOBS=$CR_JOBS
+	BUILD_COMPILE_ONE
+	BUILD_PACKAGE_ONE
+}
+
 # Multi-Target Build Function
+#
+# Two phases. Compiles are independent once each target has its own output dir,
+# so they run CR_PARALLEL at a time. Packaging is strictly sequential and in
+# target order, because PACK_KERNEL_ZIP uses target 1 as the bsdiff base and
+# target 6 as the signal to close the ZIP.
 BUILD_ALL(){
 echo "----------------------------------------------"
 echo " Compiling ALL targets "
-CR_TARGET=1
-BUILD
-export -n "CONFIG_MACH_EXYNOS9810_STARLTE_EUR_OPEN"
-CR_TARGET=2
-BUILD
-export -n "CONFIG_MACH_EXYNOS9810_STAR2LTE_EUR_OPEN"
-CR_TARGET=3
-BUILD
-export -n "CONFIG_MACH_EXYNOS9810_CROWNLTE_EUR_OPEN"
-CR_TARGET=4
-BUILD
-export -n "CONFIG_MACH_EXYNOS9810_STARLTE_KOR"
-CR_TARGET=5
-BUILD
-export -n "CONFIG_MACH_EXYNOS9810_STAR2LTE_KOR"
-CR_TARGET=6
-BUILD
-export -n "CONFIG_MACH_EXYNOS9810_CROWNLTE_KOR"
+echo " Concurrency: $CR_PARALLEL targets x $(( CR_JOBS / CR_PARALLEL )) jobs "
+echo "----------------------------------------------"
+
+BUILD_COMPILER
+CR_MAKE_JOBS=$(( CR_JOBS / CR_PARALLEL ))
+[ "$CR_MAKE_JOBS" -lt 1 ] && CR_MAKE_JOBS=1
+
+local logdir=$CR_DIR/logs/build-$$
+mkdir -p $logdir
+local all_targets="1 2 3 4 5 6"
+local queue=($all_targets)
+local failed=()
+local i=0
+
+while [ $i -lt ${#queue[@]} ]; do
+	local pids=() tags=() n=0
+	while [ $n -lt $CR_PARALLEL ] && [ $i -lt ${#queue[@]} ]; do
+		local t=${queue[$i]}
+		echo " [target $t] compiling -> $logdir/target-$t.log"
+		( CR_TARGET=$t; BUILD_COMPILE_ONE ) > $logdir/target-$t.log 2>&1 &
+		pids+=($!)
+		tags+=($t)
+		n=$(( n + 1 ))
+		i=$(( i + 1 ))
+	done
+	local k=0
+	while [ $k -lt ${#pids[@]} ]; do
+		if wait ${pids[$k]}; then
+			echo " [target ${tags[$k]}] OK"
+		else
+			echo " [target ${tags[$k]}] FAILED - see $logdir/target-${tags[$k]}.log"
+			tail -20 $logdir/target-${tags[$k]}.log
+			failed+=(${tags[$k]})
+		fi
+		k=$(( k + 1 ))
+	done
+done
+
+if [ ${#failed[@]} -ne 0 ]; then
+	echo "----------------------------------------------"
+	echo " Build FAILED for targets: ${failed[*]}"
+	echo " Logs in $logdir"
+	echo "----------------------------------------------"
+	exit 1;
+fi
+
+echo "----------------------------------------------"
+echo " All targets compiled. Packaging "
+echo "----------------------------------------------"
+for t in $all_targets; do
+	CR_TARGET=$t
+	BUILD_PACKAGE_ONE
+done
 }
 
 # Preconfigured Debug build
@@ -708,9 +822,7 @@ if [ "$CR_TARGET" = "6" ]; then # Final kernel build
 	echo " Generating ZIP Package for $CR_NAME-$CR_VERSION-$CR_DATE"
 	sed -i "s/fkv/$zver/g" $CR_OUTZIP/META-INF/com/google/android/update-binary
 	cd $CR_OUTZIP && zip -r $CR_PRODUCT/$zver.zip * && cd $CR_DIR
-	du -k "$CR_PRODUCT/$zver.zip" | cut -f1 >sizdz
-	sizdz=$(head -n 1 sizdz)
-	rm -rf sizdz
+	sizdz=$(du -k "$CR_PRODUCT/$zver.zip" | cut -f1)
 	echo " "
 	echo "----------------------------------------------"
 	echo "$CR_NAME kernel build finished."
@@ -725,6 +837,7 @@ fi
 clear
 echo "----------------------------------------------"
 echo "$CR_NAME $CR_VERSION Build Script $CR_DATE"
+BUILD_CHECK_SRCTREE
 if [ "$1" = "-d" ]; then
 BUILD_DEBUG
 fi
