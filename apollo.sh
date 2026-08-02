@@ -17,8 +17,11 @@
 # limitations under the License.
 # Main Dir
 CR_DIR=$(pwd)
-# Compiler Dir
-CR_TC=../compiler
+# Compiler Dir. Must be absolute: out-of-tree builds re-exec make with
+# -C <output dir>, so a relative path would resolve against the output dir and
+# silently drop the toolchain off PATH, leaving the build to pick up whatever
+# clang the host happens to have.
+CR_TC=$(dirname "$CR_DIR")/compiler
 # Target ARCH
 CR_ARCH=arm64
 # Define proper arch and dir for dts files
@@ -217,6 +220,22 @@ export KALLSYMS_EXTRA_PASS=1
 export ARCH=arm64 && export SUBARCH=arm64
 compile="make ARCH=arm64 CC=clang"
 CR_COMPILER_ARG="$CR_CLANG"
+
+# The build calls plain 'clang' and relies on PATH. Confirm that resolves to the
+# toolchain we just selected: a host clang picked up by mistake will reject this
+# tree's -mfloat-abi=hard and fail deep into the build for no obvious reason.
+CR_CLANG_RESOLVED=$(command -v clang)
+case "$CR_CLANG_RESOLVED" in
+	"$CR_CLANG"/bin/clang) ;;
+	*)
+		echo "----------------------------------------------"
+		echo " Wrong clang on PATH."
+		echo " expected: $CR_CLANG/bin/clang"
+		echo " found:    ${CR_CLANG_RESOLVED:-none}"
+		echo "----------------------------------------------"
+		exit 1;
+		;;
+esac
 }
 
 # Out-of-tree builds refuse to run if the source tree still holds output from
@@ -238,6 +257,27 @@ BUILD_CHECK_SRCTREE()
 		echo " Your out/ directories and Apollo/Product are not affected."
 		echo "----------------------------------------------"
 		exit 1;
+	fi
+
+	# mrproper does not remove firmware blobs generated from .ihex/.HEX/.H16
+	# sources. Left behind in the source tree they satisfy make's prerequisite
+	# through VPATH, so the blob is never generated into the output dir - and
+	# the .incbin in the generated .gen.S is a relative path resolved against
+	# that output dir, so the assembler then cannot find it. Regenerating them
+	# is free, so clear them rather than making this the user's problem.
+	local stale
+	stale=$(find $CR_DIR/firmware -type f \( -name '*.bin' -o -name '*.fw' \) 2>/dev/null | \
+		while read -r f; do
+			for ext in .ihex .HEX .H16; do
+				[ -e "$f$ext" ] && echo "$f"
+			done
+		done)
+	if [ -n "$stale" ]; then
+		echo " Removing stale generated firmware blobs:"
+		echo "$stale" | while read -r f; do
+			echo "   ${f#$CR_DIR/}"
+			rm -f "$f"
+		done
 	fi
 }
 
@@ -615,7 +655,10 @@ echo " Concurrency: $CR_PARALLEL targets x $(( CR_JOBS / CR_PARALLEL )) jobs "
 echo "----------------------------------------------"
 
 BUILD_COMPILER
-CR_MAKE_JOBS=$(( CR_JOBS / CR_PARALLEL ))
+# Round up, not down: with floor division an 8-core box at CR_PARALLEL=3 would
+# run 3x2=6 jobs and leave two cores idle. Rounding up slightly oversubscribes,
+# which is what fills the serial gaps (configure, link, kallsyms, dtbtool).
+CR_MAKE_JOBS=$(( (CR_JOBS + CR_PARALLEL - 1) / CR_PARALLEL ))
 [ "$CR_MAKE_JOBS" -lt 1 ] && CR_MAKE_JOBS=1
 
 local logdir=$CR_DIR/logs/build-$$
