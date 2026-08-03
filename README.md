@@ -1,7 +1,8 @@
 # DS-ACK Kernel — Exynos 9810
 
 Custom Linux 4.9.337 kernel for the Galaxy S9, S9+ and Note 9, built around
-KernelSU-Next and SUSFS. Developed against **NobleROM (One UI 7 / Android 15)**.
+KernelSU-Next and SUSFS. Developed against **NobleROM (One UI 7 / Android 15)**,
+and actively maintained.
 
 Source version: **V3.2.0** · KernelSU-Next **v3.2.0-legacy** · SUSFS **v1.5.5**
 
@@ -24,20 +25,20 @@ be — this is an Exynos tree.
 
 ## Features
 
+- **Boots on One UI 7.** Confirmed working on NobleROM (Android 15).
 - **Root:** KernelSU-Next v3.2.0-legacy, wired up with manual syscall hooks
   rather than kprobes.
 - **Root hiding:** SUSFS v1.5.5 integrated in-tree, including the SUSFS command
   dispatcher on `prctl`.
-- **Module support:** works with the sidex15 Universal SUSFS module, with the
-  auto-hide settings unlocked.
+- **SELinux Enforcing:** the default, and fully supported — root works with
+  SELinux left enforcing. See [SELinux modes](#selinux-modes).
 - **eBPF:** BPF verifier, cgroup-bpf and sockmap infrastructure backported from
   upstream Apollo, for userspace that expects a newer BPF surface.
-- **Display:** driver-level brightness scaling fix for One UI 7.
-- **SELinux Enforcing:** fully supported and the default — root via KernelSU-Next
-  works with SELinux left enforcing. Permissive is still built and shipped for
-  when you need it. See [SELinux modes](#selinux-modes).
 - **One installer:** a single ZIP carries all three devices — the S9 image plus
   bsdiff patches for S9+ and Note 9 — and picks the right one at flash time.
+
+Upstream KernelSU-Next is at **v3.3.0** (July 2026); this tree is on v3.2.0.
+See [Known issues](#known-issues).
 
 ## Installing
 
@@ -50,7 +51,9 @@ be — this is an Exynos tree.
 4. Reboot. If it doesn't boot, restore your backup from TWRP.
 5. Install the [KernelSU-Next Manager APK](https://github.com/KernelSU-Next/KernelSU-Next/releases)
    and open it — it should report the kernel as installed.
-6. In the manager, install the sidex15 Universal SUSFS module, then reboot.
+
+Match the manager version to the kernel: this tree ships KernelSU-Next
+**v3.2.0-legacy**, so use a v3.2.x manager.
 
 ### Which build to pick
 
@@ -65,8 +68,9 @@ Each release ships four ZIPs, from two independent choices:
 
 **Enforcing is the default and is fully supported.** Rooting this kernel does
 not require turning SELinux off: KernelSU-Next and SUSFS both work with
-enforcement left on, and that is the build you should be running. Verify after
-flashing with:
+enforcement left on, and that is the build you should be running. Permissive
+builds still exist, but they are a debugging fallback, not a feature. Verify
+after flashing with:
 
 ```
 adb shell getenforce      # -> Enforcing
@@ -169,9 +173,18 @@ call site, the build stops with *"No hooks were defined"*.
 
 - **No V3.2.0 release is published yet.** The Releases page currently tops out
   at V2.0; this README documents the source tree.
+- **Behind upstream KernelSU-Next.** This tree carries v3.2.0-legacy; upstream
+  released v3.3.0 in July 2026. Moving up means re-applying the legacy SUSFS
+  v1.5.5 patches and the `prctl` dispatcher onto the new base, so it is not a
+  drop-in submodule bump.
+- **SUSFS manager module support is unverified.** Earlier versions of this
+  README claimed compatibility with the sidex15 Universal SUSFS module. That
+  claim was not backed by testing and has been removed. The in-kernel SUSFS
+  side is real; whether that module drives it correctly on this kernel is
+  currently unconfirmed.
 - Permissive builds disable SELinux device-wide and cannot be switched back to
-  enforcing at runtime — deliberate, but flash the Enforcing build unless you
-  have a specific reason not to.
+  enforcing at runtime — flash the Enforcing build unless you have a specific
+  reason not to.
 
 <!-- Add device-level issues here as they're reported: what's broken, on which
      variant, and whether there's a workaround. -->
