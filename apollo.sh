@@ -795,25 +795,29 @@ echo " Packing ZIP "
 CR_BASE_KERNEL=$CR_OUTZIP/floyd/G960F-kernel
 CR_BASE_DTB=$CR_OUTZIP/floyd/G960F-dtb
 
-# Check packages
-if ! command -v bsdiff >/dev/null 2>&1; then 
-        echo "bsdiff is missing and is required for ZIP Packaging."
-        read -p "Do you want to install bsdiff? This requires sudo privileges. (y/n) > " INSTALL_BSDIFF
-        if [ "$INSTALL_BSDIFF" = "y" ]; then
-                echo "installing bsdiff."
-                if command -v dnf >/dev/null; then sudo dnf install -y bsdiff;
-                elif command -v apt >/dev/null; then sudo apt update && sudo apt install -y bsdiff;
-                elif command -v pacman >/dev/null; then sudo pacman -S --noconfirm bsdiff;
+# Check packages. Both are needed to produce a flashable ZIP, and 'zip' is only
+# reached at the very end of a six-target build - so check for it here, before
+# an hour of compiling, rather than failing after it.
+for CR_PKG in bsdiff zip; do
+if ! command -v $CR_PKG >/dev/null 2>&1; then
+        echo "$CR_PKG is missing and is required for ZIP Packaging."
+        read -p "Do you want to install $CR_PKG? This requires sudo privileges. (y/n) > " INSTALL_PKG
+        if [ "$INSTALL_PKG" = "y" ]; then
+                echo "installing $CR_PKG."
+                if command -v dnf >/dev/null; then sudo dnf install -y $CR_PKG;
+                elif command -v apt >/dev/null; then sudo apt update && sudo apt install -y $CR_PKG;
+                elif command -v pacman >/dev/null; then sudo pacman -S --noconfirm $CR_PKG;
                 fi
-                if ! command -v bsdiff >/dev/null 2>&1; then
-                        echo "Failed to install bsdiff. Please try installing it manually."
+                if ! command -v $CR_PKG >/dev/null 2>&1; then
+                        echo "Failed to install $CR_PKG. Please try installing it manually."
                         exit 1;
                 fi
         else
-                echo "Please install bsdiff manually and try again."
+                echo "Please install $CR_PKG manually and try again."
                 exit 1;
         fi
 fi
+done
 
 # Initalize with base image (Starlte)
 if [ "$CR_TARGET" = "1" ]; then # Always must run ONCE during BUILD_ALL otherwise fail. Setup directories
@@ -864,7 +868,13 @@ fi
 if [ "$CR_TARGET" = "6" ]; then # Final kernel build
 	echo " Generating ZIP Package for $CR_NAME-$CR_VERSION-$CR_DATE"
 	sed -i "s/fkv/$zver/g" $CR_OUTZIP/META-INF/com/google/android/update-binary
-	cd $CR_OUTZIP && zip -r $CR_PRODUCT/$zver.zip * && cd $CR_DIR
+	rm -f $CR_PRODUCT/$zver.zip
+	( cd $CR_OUTZIP && zip -r $CR_PRODUCT/$zver.zip * )
+	if [ ! -e $CR_PRODUCT/$zver.zip ]; then
+		echo "ERROR: failed to create $CR_PRODUCT/$zver.zip"
+		echo " Abort "
+		exit 1;
+	fi
 	sizdz=$(du -k "$CR_PRODUCT/$zver.zip" | cut -f1)
 	echo " "
 	echo "----------------------------------------------"
