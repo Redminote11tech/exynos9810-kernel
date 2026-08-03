@@ -2463,19 +2463,6 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 	if (error != -ENOSYS)
 		return error;
 
-#ifdef CONFIG_KSU
-	{
-		extern int ksu_handle_prctl(int option, unsigned long cmd,
-			unsigned long arg3, unsigned long arg4, unsigned long arg5,
-			long *result);
-		long ksu_result;
-
-		if (ksu_handle_prctl(option, arg2, arg3, arg4, arg5,
-				    &ksu_result))
-			return ksu_result;
-	}
-#endif
-
 	error = 0;
 	switch (option) {
 	case PR_SET_PDEATHSIG:

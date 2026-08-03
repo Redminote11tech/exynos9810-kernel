@@ -324,11 +324,15 @@ BUILD_IMAGE_NAME()
 # Build options
 BUILD_OPTIONS()
 {
-	# KSU Version - derived the same way as drivers/kernelsu/Kbuild
-	# (30000 + git rev-list count + 150), since the version is a build-time
-	# ccflags-y value, not stored in Makefile.
-	KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
-	[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 150 ))
+	# KSU Version - mirrors drivers/kernelsu/Kbuild. That Kbuild pins
+	# KSU_VERSION_OVERRIDE so the driver reports a version the stable
+	# KernelSU-Next manager accepts; honour it when present, otherwise fall
+	# back to the computed 30000 + rev-count + 200.
+	KSU_VERSION=$(grep -oP '^KSU_VERSION_OVERRIDE\s*:=\s*\K[0-9]+' KernelSU-Next/kernel/Kbuild 2>/dev/null)
+	if [ -z "$KSU_VERSION" ]; then
+		KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
+		[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 200 ))
+	fi
 	echo "----------------------------------------------"
 	echo " Apollo Kernel Build Options "
 	echo " "
@@ -415,11 +419,15 @@ BUILD_GENERATE_CONFIG()
 # Kernel information Function
 BUILD_OUT()
 {
-# KSU Version - derived the same way as drivers/kernelsu/Kbuild
-# (30000 + git rev-list count + 150), since the version is a build-time
-# ccflags-y value, not stored in Makefile.
-	KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
-	[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 150 ))
+# KSU Version - mirrors drivers/kernelsu/Kbuild. That Kbuild pins
+# KSU_VERSION_OVERRIDE so the driver reports a version the stable
+# KernelSU-Next manager accepts; honour it when present, otherwise fall
+# back to the computed 30000 + rev-count + 200.
+	KSU_VERSION=$(grep -oP '^KSU_VERSION_OVERRIDE\s*:=\s*\K[0-9]+' KernelSU-Next/kernel/Kbuild 2>/dev/null)
+	if [ -z "$KSU_VERSION" ]; then
+		KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
+		[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 200 ))
+	fi
   echo "----------------------------------------------"
   echo " Kernel		- $CR_IMAGE_NAME"
   echo " Device		- $CR_VARIANT"

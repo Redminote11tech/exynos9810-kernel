@@ -1,4 +1,4 @@
 [submodule "KernelSU-Next"]
 	path = KernelSU-Next
 	url = https://github.com/Redminote11tech/KernelSU-Next.git
-	branch = v3.2.0-legacy-susfs-patched
+	branch = v2.2.0-legacy-susfs

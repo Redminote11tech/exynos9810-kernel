@@ -50,17 +50,22 @@ CONFIG_IKHEADERS=y
 # Incremental Filesystem
 #
 CONFIG_INCREMENTAL_FS=y
+# SUSFS v2.2.0 configuration
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_PATH=y
 CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
 CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
+# TRY_UMOUNT is off: SUSFS v2.2.0 deprecates the user-defined
+# try_umount command and ships no susfs_add_try_umount(), while the
+# KernelSU driver still calls it under this option. KSU's own default
+# umount paths are unaffected.
+# CONFIG_KSU_SUSFS_TRY_UMOUNT is not set
 CONFIG_KSU_SUSFS_SPOOF_UNAME=y
 CONFIG_KSU_SUSFS_ENABLE_LOG=y
 CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
 CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-# CONFIG_KSU_SUSFS_SUS_SU is not set
+# SUS_MEMFD stays off: the KernelSU driver references
+# CMD_SUSFS_ADD_SUS_MEMFD, which this SUSFS v2.2.0 patch does not define.
+# CONFIG_KSU_SUSFS_SUS_MEMFD is not set
