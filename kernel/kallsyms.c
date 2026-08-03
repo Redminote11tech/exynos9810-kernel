@@ -667,12 +667,6 @@ static int s_show(struct seq_file *m, void *p)
 	if (!iter->name[0])
 		return 0;
 
-#ifdef CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
-	if (strstr(iter->name, "ksu_") ||
-	    !strncmp(iter->name, "susfs_", 6) ||
-	    !strncmp(iter->name, "ksud", 4))
-		return 0;
-#endif
 	if (iter->module_name[0]) {
 		char type;
 
