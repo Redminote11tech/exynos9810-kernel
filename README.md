@@ -1,18 +1,47 @@
-# DS-ACK Kernel — Exynos 9810
+<div align="center">
 
-Custom Linux 4.9.337 kernel for the Galaxy S9, S9+ and Note 9, built around
-KernelSU-Next and SUSFS. Developed against **NobleROM (One UI 7 / Android 15)**,
-and actively maintained.
+# DS-ACK Kernel
 
-Source version: **V3.2.0** · KernelSU-Next **v3.2.0-legacy** · SUSFS **v1.5.5**
+### Root that actually hides, for the Galaxy S9 · S9+ · Note 9
+
+[![Kernel](https://img.shields.io/badge/kernel-4.9.337-blue)](https://kernel.org)
+[![KernelSU-Next](https://img.shields.io/badge/KernelSU--Next-33214-brightgreen)](https://github.com/KernelSU-Next/KernelSU-Next)
+[![SUSFS](https://img.shields.io/badge/SUSFS-v2.2.0-brightgreen)](https://gitlab.com/simonpunk/susfs4ksu)
+[![SoC](https://img.shields.io/badge/SoC-Exynos%209810-orange)](#supported-devices)
+[![License](https://img.shields.io/badge/license-GPL--2.0-lightgrey)](COPYING)
+
+**One ZIP. Six device variants. Modern root hiding on hardware from 2018.**
+
+[Download](../../releases) · [Install](#-install) · [Which build?](#-which-build-do-i-want) · [Build it yourself](#-building-from-source)
+
+</div>
+
+---
+
+> [!CAUTION]
+> **Read this before you flash anything.**
+> A custom kernel can leave your phone unbootable, and flashing one trips Knox
+> **permanently** — that is irreversible and kills Samsung Pay, Secure Folder and
+> warranty service. Take a full TWRP backup of `boot` and `dtbo` first, and know
+> how to get back to stock with Odin. Nobody but you is responsible for your device.
 
 > [!WARNING]
-> Flashing a custom kernel can leave your device unbootable and trips Knox
-> permanently. Take a full TWRP backup of `boot` and `dtbo` before you start,
-> and make sure you know how to get back to stock with Odin. Nobody but you is
-> responsible for what happens to your phone.
+> **On the Un1ca One UI 8 port, the Enforcing build does not boot.** It
+> bootloops. Use the **Permissive** ZIP on that ROM. This is a property of the
+> ROM's policy, not a kernel bug — see [Which build do I want?](#-which-build-do-i-want)
 
-## Supported devices
+## ✨ What you get
+
+|  | |
+| --- | --- |
+| 🔓 **Root** | KernelSU-Next, reporting version **33214** — a version the stable manager accepts |
+| 🫥 **Root hiding** | **SUSFS v2.2.0** integrated in-tree — sus paths, sus mounts, sus kstat, sus maps, open-redirect, uname and cmdline spoofing |
+| 🛡️ **SELinux** | Enforcing *and* Permissive builds shipped, so you can match your ROM |
+| 🌐 **eBPF** | BPF verifier, cgroup-bpf and sockmap backported from upstream Apollo, for One UI 8 era userspace |
+| 📦 **One installer** | A single ZIP carries all six variants and picks the right one at flash time |
+| 🔧 **Reproducible** | Out-of-tree parallel builds, pinned submodule, no hidden state |
+
+## 📱 Supported devices
 
 | Model | Codename | Build target |
 | --- | --- | --- |
@@ -20,85 +49,68 @@ Source version: **V3.2.0** · KernelSU-Next **v3.2.0-legacy** · SUSFS **v1.5.5*
 | SM-G965F / G965N | `star2lte` | 2 / 5 (KOR) |
 | SM-N960F / N960N | `crownlte` | 3 / 6 (KOR) |
 
-Snapdragon variants (G960U, G965U, N960U) are **not** supported and never will
-be — this is an Exynos tree.
+Snapdragon variants (G960**U**, G965**U**, N960**U**) are **not** supported and
+never will be — this is an Exynos tree and the hardware differs fundamentally.
 
-## Features
+## 🚀 Install
 
-- **Boots on One UI 7.** Confirmed working on NobleROM (Android 15).
-- **Root:** KernelSU-Next v3.2.0-legacy, wired up with manual syscall hooks
-  rather than kprobes.
-- **Root hiding:** SUSFS v1.5.5 integrated in-tree, including the SUSFS command
-  dispatcher on `prctl`.
-- **SELinux Enforcing:** the default, and fully supported — root works with
-  SELinux left enforcing. See [SELinux modes](#selinux-modes).
-- **eBPF:** BPF verifier, cgroup-bpf and sockmap infrastructure backported from
-  upstream Apollo, for userspace that expects a newer BPF surface.
-- **One installer:** a single ZIP carries all three devices — the S9 image plus
-  bsdiff patches for S9+ and Note 9 — and picks the right one at flash time.
+**You need:** unlocked bootloader · TWRP · a One UI 7 or One UI 8 ROM.
 
-Upstream KernelSU-Next is at **v3.3.0** (July 2026); this tree is on v3.2.0.
-See [Known issues](#known-issues).
-
-## Installing
-
-**You need:** an unlocked bootloader, TWRP installed, and a One UI 7 ROM
-(NobleROM is what this is developed and tested against).
-
-1. Download a ZIP from the [Releases page](../../releases).
-2. Reboot to TWRP and back up `boot` and `dtbo`.
+1. **Pick your ZIP** — see [below](#-which-build-do-i-want). On Un1ca One UI 8, take **Permissive**.
+2. Reboot to TWRP and **back up `boot` and `dtbo`**.
 3. Flash the ZIP.
-4. Reboot. If it doesn't boot, restore your backup from TWRP.
-5. Install the [KernelSU-Next Manager APK](https://github.com/KernelSU-Next/KernelSU-Next/releases)
-   and open it — it should report the kernel as installed.
+4. Reboot. *If it loops, restore your backup from TWRP — no harm done.*
+5. Install the [KernelSU-Next Manager](https://github.com/KernelSU-Next/KernelSU-Next/releases) and open it. It should report the kernel as installed.
+6. For root hiding, install the SUSFS module and reboot.
 
-Match the manager version to the kernel: this tree ships KernelSU-Next
-**v3.2.0-legacy**, so use a v3.2.x manager.
+## 🎯 Which build do I want?
 
-### Which build to pick
-
-Each release ships four ZIPs, from two independent choices:
-
-| | Enforcing | Permissive |
+| Your ROM | Flash this | Why |
 | --- | --- | --- |
-| **KernelSU** | Root, SELinux intact. **Start here.** | Root, SELinux off |
-| **No KernelSU** | Clean kernel | SELinux off, no root |
+| **Un1ca (One UI 8 port)** | **Permissive** | Enforcing bootloops on this ROM — confirmed by testing |
+| **NobleROM (One UI 7)** | **Enforcing** | Root works with SELinux left on; no reason to weaken it |
+| Anything else | **Enforcing first** | Fall back to Permissive only if it won't boot |
 
-### SELinux modes
+**Enforcing** leaves SELinux exactly as your ROM intends. Rooting this kernel
+does *not* require turning SELinux off — KernelSU-Next and SUSFS both work with
+enforcement on. Verify with:
 
-**Enforcing is the default and is fully supported.** Rooting this kernel does
-not require turning SELinux off: KernelSU-Next and SUSFS both work with
-enforcement left on, and that is the build you should be running. Permissive
-builds still exist, but they are a debugging fallback, not a feature. Verify
-after flashing with:
-
-```
+```bash
 adb shell getenforce      # -> Enforcing
 ```
 
-**Permissive** is a separate build, selected at compile time by
-`CONFIG_ALWAYS_PERMISSIVE`. That option makes the kernel clamp every write to
-`/sys/fs/selinux/enforce` to `0`, so the device cannot be put back into
-enforcing mode at runtime — not even by an app or script that asks nicely. It
-exists for diagnosing a misbehaving module or ROM combination, and it is a real,
-device-wide reduction in security. Reach for it only when an Enforcing build
-actually fails you, and go back afterwards.
+**Permissive** is built with `CONFIG_ALWAYS_PERMISSIVE`, which clamps every write
+to `/sys/fs/selinux/enforce` to `0`. The device **cannot** be returned to
+enforcing at runtime — not by an app, not by a script. It is a real, device-wide
+reduction in security. Use it when a ROM genuinely needs it (Un1ca), not by habit.
 
-Enforcing builds simply don't set that option, so SELinux behaves exactly as the
-ROM intends.
-
+> [!NOTE]
 > Every image has `SEANDROIDENFORCE` appended, Permissive ones included. That is
-> a marker the Samsung bootloader looks for to suppress the red boot warning —
-> it has nothing to do with which SELinux mode the kernel runs in. Don't read it
-> as proof you're on an Enforcing build; use `getenforce`.
+> a Samsung **bootloader** marker that suppresses the red boot warning — it says
+> nothing about SELinux mode. Don't read it as proof you're Enforcing; use `getenforce`.
 
-## Building from source
+## 🔬 How the root hiding works
 
-**Host requirements:** Linux, `bsdiff` (the script offers to install it via
-apt/dnf/pacman), and roughly 40 GB free. `apollo.sh` downloads its own Clang
-toolchain on first run.
+SUSFS v2.2.0 is patched directly into the kernel — not a module, not a shim.
+Userspace talks to it through the KernelSU supercall on `sys_reboot`
+(magic `0xDEADBEEF` / `0xFAFAFAFA`), which is the ABI SUSFS v2.0.0+ tooling
+prefers and probes for first.
 
-This repo uses a git submodule for KernelSU-Next, so clone recursively:
+| Capability | Config |
+| --- | --- |
+| Hide paths from stat/readdir | `CONFIG_KSU_SUSFS_SUS_PATH` |
+| Hide mounts from non-root processes | `CONFIG_KSU_SUSFS_SUS_MOUNT` |
+| Spoof inode metadata | `CONFIG_KSU_SUSFS_SUS_KSTAT` |
+| Hide mappings in `/proc/*/maps` | `CONFIG_KSU_SUSFS_SUS_MAP` |
+| Redirect opens | `CONFIG_KSU_SUSFS_OPEN_REDIRECT` |
+| Spoof `uname` | `CONFIG_KSU_SUSFS_SPOOF_UNAME` |
+| Spoof `/proc/cmdline` | `CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG` |
+| Hide `ksu_`/`susfs_` symbols from kallsyms | `CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS` |
+
+## 🛠️ Building from source
+
+**Host:** Linux · `bsdiff` and `zip` (the script offers to install them) · ~40 GB free.
+`apollo.sh` downloads its own Clang toolchain on first run.
 
 ```bash
 git clone --recurse-submodules https://github.com/Redminote11tech/exynos9810-kernel.git
@@ -106,108 +118,93 @@ cd exynos9810-kernel
 ./apollo.sh
 ```
 
-Already cloned without it?
+Already cloned without submodules? `git submodule update --init --recursive`
 
-```bash
-git submodule update --init --recursive
-```
-
-`apollo.sh` prompts for device, compiler, SELinux mode (defaults to Enforcing),
-KernelSU and clean/dirty,
+`apollo.sh` prompts for device, compiler, SELinux mode, KernelSU and clean/dirty,
 then drops a flashable ZIP in `Apollo/Product`. Option **7** builds the
 all-device ZIP; option **8** builds the four release ZIPs in one run.
 
-> The multi-device ZIP is assembled with `starlte` as the base image and bsdiff
-> patches for the others, so it only comes out of options 7 and 8. Building a
-> single non-`starlte` target gives you an image, not a universal package.
+### Parallel builds
 
-#### Output layout and parallel builds
-
-Builds are out-of-tree. Each target compiles into its own directory under
-`out/`, named `<variant>-<selinux>-<ksu>`, e.g. `out/G960F-enforcing-ksu`. The
-source tree stays clean, and because no two targets share a `.config` or an
-object file, multi-target builds compile several devices at once:
+Builds are out-of-tree — each target compiles into its own `out/<variant>-<selinux>-<ksu>/`,
+so the source tree stays clean and targets never share a `.config`:
 
 ```bash
-CR_PARALLEL=3 ./apollo.sh      # 3 devices at a time
+CR_PARALLEL=3 ./apollo.sh      # 3 devices at once
 ```
 
-Each concurrent build gets `nproc / CR_PARALLEL` make jobs, so total thread
-count stays constant. The default is 2 — keep it low, since ThinLTO linking is
-memory hungry and several simultaneous links will swap a 16 GB machine. Compiles
-run in parallel; packaging always runs sequentially afterwards. Per-target
-output goes to `logs/build-<pid>/target-N.log`.
+Each concurrent build gets `nproc / CR_PARALLEL` jobs, so total threads stay
+constant. Default is **2** — keep it low, ThinLTO linking is memory hungry and
+several simultaneous links will swap a 16 GB machine. Per-target logs land in
+`logs/build-<pid>/`.
 
-Because each target keeps its own output dir, a rebuild after changing one
-device (or just flipping SELinux mode) is incremental instead of a full rebuild.
+> [!TIP]
+> Because each target keeps its own output dir, rebuilding one device — or just
+> flipping SELinux mode — is incremental, not a full rebuild.
 
-> **Coming from an older checkout:** kbuild refuses out-of-tree builds while the
-> source tree still holds in-tree build output. `apollo.sh` detects this and
-> tells you; the one-time fix is
-> `make ARCH=arm64 mrproper && rm -f KernelSU-Next/kernel/*.o KernelSU-Next/kernel/*/*.o`.
+> **Coming from an older checkout?** kbuild refuses out-of-tree builds while the
+> source tree holds in-tree output. `apollo.sh` detects this and prints the fix:
+> `make ARCH=arm64 mrproper`
 
-### The KernelSU-Next submodule
+### Submodule and hooks
 
-The submodule tracks [`Redminote11tech/KernelSU-Next`](https://github.com/Redminote11tech/KernelSU-Next),
-branch `v3.2.0-legacy-susfs-patched` — a fork of KernelSU-Next carrying the
-legacy SUSFS v1.5.5 patches and the `prctl` SUSFS dispatcher.
+The KernelSU-Next submodule tracks
+[`Redminote11tech/KernelSU-Next`](https://github.com/Redminote11tech/KernelSU-Next)
+branch `v2.2.0-legacy-susfs`, which carries the SUSFS v2 driver and pins
+`KSU_VERSION` to 33214.
 
-KernelSU's version number is computed from that submodule's commit count, so its
-`.git` directory has to be present at build time or you get a fallback version
-baked into the kernel.
+KernelSU is built with `CONFIG_KSU_MANUAL_HOOK`, not kprobes. The hook lives in
+the kernel tree at `kernel/reboot.c` (`ksu_handle_sys_reboot`) — Kbuild greps for
+it, and the build stops with *"No hooks were defined"* if it goes missing.
 
-### Manual hooks
+> [!NOTE]
+> The KernelSU Kbuild **rewrites kernel sources in place** at build time with
+> `sed`, touching ~two dozen paths (`fs/namespace.c`, `include/linux/seccomp.h`,
+> `security/selinux/*`, `kernel/cred.c` …). The edits are idempotent, but it is
+> why a tree can look dirty after a build.
 
-KernelSU-Next is built with `CONFIG_KSU_MANUAL_HOOK`, not kprobes. `apollo.sh`
-sets this for every device variant. The hooks themselves live in the kernel tree:
+## ⚠️ Known issues
 
-| Hook | Location |
-| --- | --- |
-| `ksu_handle_sys_reboot` | `kernel/reboot.c` |
-| `ksu_handle_prctl` (SUSFS commands) | `kernel/sys.c` |
+- **Enforcing bootloops on the Un1ca One UI 8 port.** Use Permissive there.
+- **SUSFS on-device behaviour is still being validated.** v2.2.0 builds, links
+  and reports correctly, and its ABI matches what current SUSFS tooling probes
+  for — but broad on-device confirmation across ROMs is ongoing. Report what you
+  find in [Issues](../../issues).
+- **KernelSU-Next lineage.** This tree runs a `v3.0.1-legacy`-based driver
+  carrying SUSFS v2 support, with the reported version pinned to 33214. Upstream
+  KernelSU-Next is separately at v3.3.0; the two version lines are not directly
+  comparable.
+- Permissive builds cannot be returned to enforcing at runtime — by design.
 
-Kbuild greps for these. If you rebase onto a new kernel base and lose either
-call site, the build stops with *"No hooks were defined"*.
+## 🤝 Contributing
 
-## Known issues
+Bug reports are genuinely useful, especially with a `/proc/last_kmsg` or a TWRP
+dmesg capture if something fails to boot. Say which **device**, which **ROM**,
+and which **ZIP** you flashed — that combination is almost always the answer.
 
-- **No V3.2.0 release is published yet.** The Releases page currently tops out
-  at V2.0; this README documents the source tree.
-- **Behind upstream KernelSU-Next.** This tree carries v3.2.0-legacy; upstream
-  released v3.3.0 in July 2026. Moving up means re-applying the legacy SUSFS
-  v1.5.5 patches and the `prctl` dispatcher onto the new base, so it is not a
-  drop-in submodule bump.
-- **SUSFS manager module support is unverified.** Earlier versions of this
-  README claimed compatibility with the sidex15 Universal SUSFS module. That
-  claim was not backed by testing and has been removed. The in-kernel SUSFS
-  side is real; whether that module drives it correctly on this kernel is
-  currently unconfirmed.
-- Permissive builds disable SELinux device-wide and cannot be switched back to
-  enforcing at runtime — flash the Enforcing build unless you have a specific
-  reason not to.
-
-<!-- Add device-level issues here as they're reported: what's broken, on which
-     variant, and whether there's a workaround. -->
-
-## Upstream
+## 🧭 Upstream
 
 Forked from [duhansysl/exynos9810-kernel](https://github.com/duhansysl/exynos9810-kernel)
-(branch `duhan-(4.9.337)`), itself based on ananjaser1211's Apollo. To pull in
-new Apollo work:
+(`duhan-(4.9.337)`), itself based on ananjaser1211's Apollo.
 
 ```bash
-git fetch upstream
-git merge upstream/'duhan-(4.9.337)'
+git fetch upstream && git merge upstream/'duhan-(4.9.337)'
 ```
 
-## Credits
+## 💛 Credits
 
 - [@duhansysl](https://github.com/duhansysl) — kernel source and the Apollo build system
 - [@ananjaser1211](https://github.com/ananjaser1211) — original Apollo kernel base
 - [@RifsxD](https://github.com/rifsxd) — KernelSU-Next
 - [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) — SUSFS
-- sidex15 — Universal SUSFS module and the KSU-Next SUSFS work
+- [@gavdoc38](https://github.com/gavdoc38) — SUSFS v2 driver pairing for Exynos 9810
+- [cyberc3dr](https://github.com/cyberc3dr/nGKI_Kernel_Build) — SUSFS v2.2.0 patch set for 4.9
+- [sidex15](https://github.com/sidex15) — SUSFS module and binaries
 
-## License
+## 📄 License
 
 GPL-2.0, inherited from the Linux kernel. See [COPYING](COPYING).
+
+<div align="center">
+<sub>Your warranty is now void. Flash responsibly.</sub>
+</div>
