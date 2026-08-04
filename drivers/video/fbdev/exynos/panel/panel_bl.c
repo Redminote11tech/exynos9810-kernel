@@ -766,10 +766,20 @@ static int panel_set_brightness(struct backlight_device *bd)
 	int ret = 0;
 	int id, brightness = bd->props.brightness;
 	struct panel_bl_device *panel_bl = bl_get_data(bd);
-	/* Scale 0-255 (OneUI 7) to 0-44800 (panel driver range) */
-	if (bd->props.max_brightness > 255 && brightness <= 255)
-		brightness = brightness * bd->props.max_brightness / 255;
 	struct panel_device *panel = to_panel_device(panel_bl);
+
+	/*
+	 * One UI writes the panel's un-scaled brightness index (0..max/BRT_SCALE,
+	 * e.g. 0..447 on crown) while PAC 3.0 expects that index multiplied by
+	 * BRT_SCALE (0..44700). Passing it through raw lands at ~1% brightness.
+	 *
+	 * Scale by BRT_SCALE rather than to max_brightness: max_brightness
+	 * includes the HBM range above UI_MAX_BRIGHTNESS, so mapping the slider
+	 * onto it would drive normal levels into outdoor boost.
+	 */
+	if (BRT_SCALE > 1 && brightness > 0 &&
+	    brightness <= bd->props.max_brightness / BRT_SCALE)
+		brightness = BRT(brightness);
 
 	mutex_lock(&panel_bl->lock);
 	mutex_lock(&panel->op_lock);
