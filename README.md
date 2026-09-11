@@ -29,6 +29,12 @@
 > **On the Un1ca One UI 8 port, the Enforcing build does not boot.** It
 > bootloops. Use the **Permissive** ZIP on that ROM. This is a property of the
 > ROM's policy, not a kernel bug — see [Which build do I want?](#-which-build-do-i-want)
+>
+> V3.2.1 includes a fix that may change this: SELinux policy injection now
+> runs under the intended rwlock path on 4.9 instead of a fallback, and the
+> bootloop is suspected to be policy-injection related. If you try **Enforcing**
+> on Un1ca with V3.2.1 and it boots clean, please report it in
+> [Issues](../../issues) so this guidance can be retired.
 
 ## ✨ What you get
 
@@ -38,6 +44,7 @@
 | 🫥 **Root hiding** | **SUSFS v2.2.0** integrated in-tree — sus paths, sus mounts, sus kstat, sus maps, open-redirect, uname and cmdline spoofing |
 | 🛡️ **SELinux** | Enforcing *and* Permissive builds shipped, so you can match your ROM |
 | 🌐 **eBPF** | BPF verifier, cgroup-bpf and sockmap backported from upstream Apollo, for One UI 8 era userspace |
+| 📁 **EROFS** | EROFS built into the kernel — One UI 8 / Un1ca system images mount natively, SELinux contexts included |
 | 📦 **One installer** | A single ZIP carries all six variants and picks the right one at flash time |
 | 🔧 **Reproducible** | Out-of-tree parallel builds, pinned submodule, no hidden state |
 
@@ -106,6 +113,37 @@ prefers and probes for first.
 | Spoof `uname` | `CONFIG_KSU_SUSFS_SPOOF_UNAME` |
 | Spoof `/proc/cmdline` | `CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG` |
 | Hide `ksu_`/`susfs_` symbols from kallsyms | `CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS` |
+
+## 📁 EROFS support
+
+The kernel ships an EROFS driver compiled in (`CONFIG_EROFS_FS=y` in every
+release variant), backported from the 5.x-era mainline code: LZ4 decompression,
+big-pcluster, XATTR + POSIX ACL + `security.selinux` support, plus an ARM64
+NEON LZ4 fast path.
+
+This matters for One UI 8-era ROMs: [Un1ca](https://github.com/Eend15/Unofficial-Un1ca-9810)
+builds `system`/`vendor`/`odm` as EROFS images, and this kernel mounts them
+natively. Verified against Un1ca's actual image settings
+(`mkfs.erofs -z lz4hc,9 -b 4096` — no fragments, no ztailpacking, no
+chunk-based files), which sit squarely inside the driver's supported feature
+set.
+
+To verify on a running device:
+
+```bash
+# as root, with a Un1ca system.img pushed to /data/local/tmp
+mkdir -p /mnt/erofs_test
+losetup /dev/loop0 /data/local/tmp/system.img
+mount -t erofs /dev/loop0 /mnt/erofs_test
+ls /mnt/erofs_test                       # files listed
+getfattr -n security.selinux /mnt/erofs_test/bin   # SELinux context intact
+umount /mnt/erofs_test && losetup -d /dev/loop0
+```
+
+> [!NOTE]
+> If a future Un1ca build starts passing `--fragment` or `--ztailpacking` to
+> mkfs.erofs, the driver would need another backport round — today's format
+> does not use them.
 
 ## 🛠️ Building from source
 
