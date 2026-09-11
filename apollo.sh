@@ -45,7 +45,7 @@ CR_DTB=
 # defconfig dir
 CR_DEFCONFIG=$CR_DIR/arch/$CR_ARCH/configs
 # Kernel Name and Version
-CR_VERSION=V3.2.0-susfs2
+CR_VERSION=V3.2.1-susfs2
 CR_NAME=DS-ACK
 # Thread count. Plain nproc respects CPU affinity and cgroup limits;
 # --all ignores both and oversubscribes in containers or under taskset.
