@@ -1,0 +1,12 @@
+EROFS for linux-4.9 (exynos9810 tree)
+
+Backported from the 5.x-era mainline driver (zmap/zdata layout: LZ4_0PADDING,
+COMPR_CFGS, BIG_PCLUSTER feature bits) with 4.9 adaptations:
+ - bio uses bi_bdev / partition index instead of gendisk pointers
+ - no readahead API; uses the 4.9 address_space_operations conventions
+ - optional ARM64 v8 NEON LZ4 decompression fast path (lib/lz4/lz4armv8/)
+
+Known-good usage: Android system images built with mkfs.erofs
+"-z lz4hc,9 -b 4096" (Samsung/UN1CA One UI 8 EROFS images, verified).
+Compression: LZ4 only (LZ4_DECOMPRESS). XATTR, POSIX_ACL and
+EROFS_FS_SECURITY are enabled for SELinux contexts.
