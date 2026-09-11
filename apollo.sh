@@ -87,7 +87,9 @@ CR_CONFIG_APOLLO=apollo_defconfig
 CR_CONFIG_INTL=eur_defconfig
 CR_CONFIG_KOR=kor_defconfig
 CR_SELINUX="2"
-CR_KSU="n"
+# KernelSU (and SUSFS with it) is always built; the no-KSU variant was
+# removed — it shipped neither root nor root hiding.
+CR_KSU="y"
 CR_CLEAN="n"
 # Default Compilation
 DEFAULT_TARGET=3   # crownlte
@@ -288,7 +290,7 @@ BUILD_TARGET_ID()
 {
 	local sel ksu
 	if [ "$CR_SELINUX" = "1" ]; then sel=permissive; else sel=enforcing; fi
-	if [[ "$CR_KSU" =~ ^[yY]$ ]]; then ksu=ksu; else ksu=noksu; fi
+	ksu=ksu # KernelSU is always built
 	CR_TAG=$CR_VARIANT-$sel-$ksu
 	CR_OUTDIR=$CR_OUT_ROOT/$CR_TAG
 	CR_TMPCONFIG=tmp_${CR_TAG}_defconfig
@@ -743,14 +745,14 @@ exit 0;
 BUILD_GITHUB_RELEASE(){
 echo "----------------------------------------------"
 echo " Initiating Automated GitHub Release Build "
-echo " This will compile 4 ZIPs (Enforcing/Permissive + KSU/No-KSU)"
+echo " This will compile 2 ZIPs (Enforcing/Permissive, both with KernelSU + SUSFS)"
 echo " Note: Performing 1 initial clean, then using dirty builds to save time."
 echo "----------------------------------------------"
 
 CR_MKZIP="y"
 CR_CLEAN="n"
 
-echo "=== [0/4] Initial Workspace Cleanup ==="
+echo "=== [0/2] Initial Workspace Cleanup ==="
 rm -r -f $CR_DTB
 rm -r -f $CR_KERNEL
 rm -rf $CR_DTS/.*.tmp
@@ -763,33 +765,21 @@ rm -rf $CR_OUTZIP
 echo " Cleanup done. Starting fast incremental builds..."
 echo "----------------------------------------------"
 
-# 1. Enforcing, No KSU
-echo "=== [1/4] Building Enforcing - No KSU ==="
-CR_SELINUX=2
-CR_KSU="n"
-BUILD_ALL
-
-# 2. Enforcing, KSU
-echo "=== [2/4] Building Enforcing - KernelSU ==="
+# 1. Enforcing, KernelSU + SUSFS
+echo "=== [1/2] Building Enforcing - KernelSU ==="
 CR_SELINUX=2
 CR_KSU="y"
 BUILD_ALL
 
-# 3. Permissive, No KSU
-echo "=== [3/4] Building Permissive - No KSU ==="
-CR_SELINUX=1
-CR_KSU="n"
-BUILD_ALL
-
-# 4. Permissive, KSU
-echo "=== [4/4] Building Permissive - KernelSU ==="
+# 2. Permissive, KernelSU + SUSFS
+echo "=== [2/2] Building Permissive - KernelSU ==="
 CR_SELINUX=1
 CR_KSU="y"
 BUILD_ALL
 
 echo "----------------------------------------------"
 echo " GitHub Release Builds Completed Successfully! "
-echo " Check $CR_PRODUCT directory for your 4 new ZIP files."
+echo " Check $CR_PRODUCT directory for your 2 new ZIP files."
 echo "----------------------------------------------"
 exit 0;
 }
@@ -913,7 +903,7 @@ echo "6) crownltekor"
 echo  ""
 echo "7) Build ZIP for all devices"
 echo ""
-echo "8) Build GitHub Release ZIPs (4 ZIPs)"
+echo "8) Build GitHub Release ZIPs (2 ZIPs)"
 echo ""
 echo "9) Abort"
 echo "----------------------------------------------"
@@ -959,7 +949,8 @@ echo "1) SELinux Permissive "  "2) SELinux Enforcing"
 echo " "
 read -p "Please select your SElinux mode (1-2) > " CR_SELINUX
 echo " "
-read -p "Enable KernelSU? (y/n) > " CR_KSU
+# KernelSU (and SUSFS with it) is always built; the no-KSU variant was removed.
+CR_KSU="y"
 echo " "
 read -p "Clean Builds? (y/n) > " CR_CLEAN
 echo " "
@@ -978,9 +969,6 @@ if ! [[ "$CR_SELINUX" =~ ^[1-2]$ ]]; then
     CR_SELINUX=$DEFAULT_SELINUX
 fi
 
-if ! [[ "$CR_KSU" =~ ^[yYnN]$ ]]; then
-    CR_KSU=$DEFAULT_KSU
-fi
 if ! [[ "$CR_CLEAN" =~ ^[yYnN]$ ]]; then
     CR_CLEAN=$DEFAULT_CLEAN
 fi

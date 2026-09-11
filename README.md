@@ -160,7 +160,8 @@ Already cloned without submodules? `git submodule update --init --recursive`
 
 `apollo.sh` prompts for device, compiler, SELinux mode, KernelSU and clean/dirty,
 then drops a flashable ZIP in `Apollo/Product`. Option **7** builds the
-all-device ZIP; option **8** builds the four release ZIPs in one run.
+all-device ZIP; option **8** builds the two release ZIPs (Enforcing and
+Permissive — KernelSU + SUSFS are always built) in one run.
 
 ### Parallel builds
 
