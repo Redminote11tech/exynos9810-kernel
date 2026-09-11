@@ -1172,8 +1172,8 @@ void susfs_get_enabled_features(void __user **user_info) {
 	size_t copied_size = 0;
 
 	if (!info) {
-		info->err = -ENOMEM;
-		goto out_copy_to_user;
+		SUSFS_LOGE("fail to kzalloc for st_susfs_enabled_features\n");
+		return;
 	}
 
 	if (copy_from_user(info, (struct st_susfs_enabled_features __user*)*user_info, sizeof(struct st_susfs_enabled_features))) {
@@ -1480,7 +1480,7 @@ static void susfs_run_extra_works(struct work_struct *work) {
 }
 
 /* susfs_init */
-void susfs_init(void) {\
+void susfs_init(void) {
 	SUSFS_LOGI("Initializing susfs_extra_works\n");
 	INIT_WORK(&susfs_extra_works, susfs_run_extra_works);
 	SUSFS_LOGI("susfs is initialized! version: " SUSFS_VERSION " \n");
