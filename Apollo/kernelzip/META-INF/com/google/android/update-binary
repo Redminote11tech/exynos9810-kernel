@@ -1,10 +1,11 @@
 #!/sbin/sh
+set -e
 # Copyright 2020-2022 © corsicanu
 # Licensed under CC BY-NC-SA 4.0
 # https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 
-device=$(cat /proc/cmdline | sed 's/ /\n/g' | grep "androidboot.bootloader")
-if [ ! $device ] ; then
+device=$(cat /proc/cmdline | sed 's/ /\n/g' | grep "androidboot.bootloader" || true)
+if [ -z "$device" ] ; then
     device=$1
 fi
 
@@ -31,6 +32,7 @@ if echo $device | grep '[GN]96[05][FN]'; then
 
     bb=/tmp/floyd/tools/busybox
     boot=$($bb find /dev/block/platform -iname boot)
+    [ -n "$boot" ] && [ -b "$boot" ] || { ui_print "Boot partition not found"; exit 1; }
 
     
     ui_print " "
@@ -75,7 +77,7 @@ if echo $device | grep '[GN]96[05][FN]'; then
         exit
     fi
 
-    ui_print "- Installing DS-ACK-V1 Kernel"
+    ui_print "- Installing fkv"
     cd /tmp/floyd && rm -rf /tmp/floydKernel && mkdir -p /tmp/floydKernel && cd /tmp/floydKernel
     cp /tmp/floyd/tools/magiskboot imgtool && chmod 777 imgtool
     dd if=$boot of=/tmp/floydKernel/old-boot.img bs=4096
@@ -101,4 +103,3 @@ else
     ui_print " "
     exit 1
 fi
-

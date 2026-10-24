@@ -738,6 +738,10 @@ LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
 
 ifdef CONFIG_THINLTO
 lto-clang-flags := -flto=thin
+KBUILD_LDFLAGS += --thinlto-cache-dir=$(objtree)/.thinlto-cache
+ifneq ($(KBUILD_LTO_JOBS),)
+KBUILD_LDFLAGS += --thinlto-jobs=$(KBUILD_LTO_JOBS)
+endif
 else
 lto-clang-flags := -flto
 endif

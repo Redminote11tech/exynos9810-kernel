@@ -10,6 +10,7 @@ config SECURITY_SELINUX
 	  
 config ALWAYS_PERMISSIVE
 	bool "NSA SELinux Permissive"
+	depends on SECURITY_SELINUX && SECURITY_SELINUX_DEVELOP
 	default n
 	help
 	  This forces the kernel to run in permissive mode.

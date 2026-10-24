@@ -276,6 +276,15 @@ config SOC_EXYNOS9810
 	select PINCTRL
 	select SAMSUNG_DMADEV
 
+config EXYNOS9810_EROFS_FSTAB
+	bool "Use EROFS for Exynos9810 system/vendor/odm in the device tree"
+	depends on SOC_EXYNOS9810 && EROFS_FS=y
+	default n
+	help
+	  Select this only for ROMs whose system, vendor and odm images use EROFS.
+	  The default device tree uses ext4. The filesystem in the device tree
+	  must match the installed ROM for first-stage init to mount it.
+
 config SOC_EXYNOS9810_EVT1
 	bool "Samsung EXYNOS9810_EVT1"
 	depends on SOC_EXYNOS9810

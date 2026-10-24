@@ -213,6 +213,8 @@ static int __init enforcing_setup(char *str)
 // [ SEC_SELINUX_PORTING_COMMON
 #ifdef CONFIG_ALWAYS_ENFORCE
 		selinux_enforcing = 1;
+#elif defined(CONFIG_ALWAYS_PERMISSIVE)
+		selinux_enforcing = 0;
 #else
 		selinux_enforcing = enforcing ? 1 : 0;
 #endif
@@ -2585,6 +2587,11 @@ static u32 ptrace_parent_sid(struct task_struct *task)
 	return sid;
 }
 
+#ifdef CONFIG_KSU
+extern bool is_ksu_transition(const struct task_security_struct *old_tsec,
+			      const struct task_security_struct *new_tsec);
+#endif
+
 static int check_nnp_nosuid(const struct linux_binprm *bprm,
 			    const struct task_security_struct *old_tsec,
 			    const struct task_security_struct *new_tsec)
@@ -2593,13 +2600,6 @@ static int check_nnp_nosuid(const struct linux_binprm *bprm,
 	int nosuid = !mnt_may_suid(bprm->file->f_path.mnt);
 	int rc;
 
-#ifdef CONFIG_KSU
-        static u32 ksu_sid;
-        char *secdata;
-        int error;
-        u32 seclen;
-#endif
-
 	if (!nnp && !nosuid)
 		return 0; /* neither NNP nor nosuid */
 
@@ -2607,17 +2607,8 @@ static int check_nnp_nosuid(const struct linux_binprm *bprm,
 		return 0; /* No change in credentials */
 
 #ifdef CONFIG_KSU
-	if (!ksu_sid) {
-            security_secctx_to_secid("u:r:su:s0", strlen("u:r:su:s0"), &ksu_sid);
-	}
-	error = security_secid_to_secctx(old_tsec->sid, &secdata, &seclen);
-	if (!error) {
-            rc = strcmp("u:r:init:s0",secdata);
-            security_release_secctx(secdata, seclen);
-            if (rc == 0 && new_tsec->sid == ksu_sid) {
+	if (is_ksu_transition(old_tsec, new_tsec))
 		return 0;
-            }
-        }
 #endif
 
 	/*
@@ -7752,6 +7743,8 @@ static __init int selinux_init(void)
 // [ SEC_SELINUX_PORTING_COMMON
 #ifdef CONFIG_ALWAYS_ENFORCE
 		selinux_enforcing = 1;
+#elif defined(CONFIG_ALWAYS_PERMISSIVE)
+		selinux_enforcing = 0;
 #endif
 // ] SEC_SELINUX_PORTING_COMMON
 	if (selinux_enforcing)

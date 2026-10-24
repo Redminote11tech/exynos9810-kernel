@@ -32,6 +32,7 @@
 *.lz4
 *.lzo
 *.patch
+!/scripts/ksu-patches/0001-exynos9810-susfs-integration.patch
 *.gcno
 *.ll
 modules.builtin
@@ -160,6 +161,10 @@ drivers/kernelsu/*
 
 # local build logs
 logs/
+.cache/
+scripts/__pycache__/
+scripts/tests/__pycache__/
+Apollo/Product/*.sha256
 
 # per-target kbuild output dirs (make O=)
 out/

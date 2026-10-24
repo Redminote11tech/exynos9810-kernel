@@ -45,17 +45,30 @@ CR_DTB=
 # defconfig dir
 CR_DEFCONFIG=$CR_DIR/arch/$CR_ARCH/configs
 # Kernel Name and Version
-CR_VERSION=V3.2.1-susfs2
+CR_VERSION=${CR_VERSION:-V3.2.2-susfs2}
 CR_NAME=DS-ACK
+# Match first-stage init's DT fstab to the ROM's system/vendor/odm images.
+CR_FS_TYPE=${CR_FS_TYPE:-erofs}
+case "$CR_FS_TYPE" in
+  ext4|erofs) ;;
+  *) echo "Invalid CR_FS_TYPE: choose ext4 or erofs" >&2; exit 1 ;;
+esac
+# Apply once before starting any parallel device builds.
+bash "$CR_DIR/scripts/apply-ksu-fixes.sh" || exit 1
 # Thread count. Plain nproc respects CPU affinity and cgroup limits;
 # --all ignores both and oversubscribes in containers or under taskset.
-CR_JOBS=$(nproc)
+CR_JOBS=${CR_JOBS:-$(nproc)}
 # How many device targets to compile at once during a multi-target build.
 # Each concurrent build gets CR_JOBS/CR_PARALLEL make jobs, so the total thread
 # count stays at CR_JOBS. Keep this low: ThinLTO linking is memory hungry and
 # several concurrent links will swap a 16 GB machine to death. Override with
 # CR_PARALLEL=n ./apollo.sh
 CR_PARALLEL=${CR_PARALLEL:-2}
+CR_USE_CCACHE=${CR_USE_CCACHE:-1}
+CR_SEED_OUTPUTS=${CR_SEED_OUTPUTS:-1}
+for CR_COUNT in "$CR_JOBS" "$CR_PARALLEL"; do
+    [[ "$CR_COUNT" =~ ^[1-9][0-9]*$ ]] || { echo 'Job counts must be positive integers' >&2; exit 1; }
+done
 # Target Android version
 CR_ANDROID=q
 CR_PLATFORM=13.0.0
@@ -220,7 +233,15 @@ export STRIP=$CR_CLANG/bin/llvm-strip
 export LLVM=1
 export KALLSYMS_EXTRA_PASS=1
 export ARCH=arm64 && export SUBARCH=arm64
-compile="make ARCH=arm64 CC=clang"
+CR_CC=clang
+if [ "$CR_USE_CCACHE" = 1 ] && command -v ccache >/dev/null 2>&1; then
+    export CCACHE_DIR=${CCACHE_DIR:-$CR_DIR/.cache/ccache}
+    export CCACHE_BASEDIR=$CR_DIR
+    export CCACHE_MAXSIZE=${CCACHE_MAXSIZE:-30G}
+    mkdir -p "$CCACHE_DIR"
+    CR_CC="ccache clang"
+fi
+compile=(make ARCH=arm64 "CC=$CR_CC")
 CR_COMPILER_ARG="$CR_CLANG"
 
 # The build calls plain 'clang' and relies on PATH. Confirm that resolves to the
@@ -291,7 +312,7 @@ BUILD_TARGET_ID()
 	local sel ksu
 	if [ "$CR_SELINUX" = "1" ]; then sel=permissive; else sel=enforcing; fi
 	ksu=ksu # KernelSU is always built
-	CR_TAG=$CR_VARIANT-$sel-$ksu
+	CR_TAG=$CR_VARIANT-$sel-$ksu-$CR_FS_TYPE
 	CR_OUTDIR=$CR_OUT_ROOT/$CR_TAG
 	CR_TMPCONFIG=tmp_${CR_TAG}_defconfig
 	CR_KERNEL=$CR_OUTDIR/arch/$CR_ARCH/boot/Image
@@ -320,21 +341,17 @@ BUILD_IMAGE_NAME()
 {
 	CR_IMAGE_NAME=$CR_NAME-$CR_VERSION-$CR_VARIANT-$CR_DATE
 	zver=$CR_NAME-$CR_VERSION-$CR_DATE
+	if [ "$CR_FS_TYPE" = "erofs" ]; then
+		CR_IMAGE_NAME=$CR_IMAGE_NAME-EROFS
+		zver=$zver-EROFS
+	fi
     
 }
 
 # Build options
 BUILD_OPTIONS()
 {
-	# KSU Version - mirrors drivers/kernelsu/Kbuild. That Kbuild pins
-	# KSU_VERSION_OVERRIDE so the driver reports a version the stable
-	# KernelSU-Next manager accepts; honour it when present, otherwise fall
-	# back to the computed 30000 + rev-count + 200.
-	KSU_VERSION=$(grep -oP '^KSU_VERSION_OVERRIDE\s*:=\s*\K[0-9]+' KernelSU-Next/kernel/Kbuild 2>/dev/null)
-	if [ -z "$KSU_VERSION" ]; then
-		KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
-		[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 200 ))
-	fi
+	KSU_VERSION=$(bash "$CR_DIR/scripts/ksu-version.sh") || exit 1
 	echo "----------------------------------------------"
 	echo " Apollo Kernel Build Options "
 	echo " "
@@ -392,6 +409,12 @@ BUILD_GENERATE_CONFIG()
   # Apollo Custom defconfig
   echo " Apollo	- $CR_CONFIG_APOLLO "
   cat $CR_DEFCONFIG/$CR_CONFIG_APOLLO >> $CR_DEFCONFIG/$CR_TMPCONFIG
+  if [ "$CR_FS_TYPE" = "erofs" ]; then
+    echo "CONFIG_EROFS_FS=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
+    echo "CONFIG_EXYNOS9810_EROFS_FSTAB=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
+  else
+    echo "# CONFIG_EXYNOS9810_EROFS_FSTAB is not set" >> $CR_DEFCONFIG/$CR_TMPCONFIG
+  fi
   # Selinux Never Enforce all targets
   if [ $CR_SELINUX = "1" ]; then
     echo " Building SELinux Permissive Kernel"
@@ -421,15 +444,7 @@ BUILD_GENERATE_CONFIG()
 # Kernel information Function
 BUILD_OUT()
 {
-# KSU Version - mirrors drivers/kernelsu/Kbuild. That Kbuild pins
-# KSU_VERSION_OVERRIDE so the driver reports a version the stable
-# KernelSU-Next manager accepts; honour it when present, otherwise fall
-# back to the computed 30000 + rev-count + 200.
-	KSU_VERSION=$(grep -oP '^KSU_VERSION_OVERRIDE\s*:=\s*\K[0-9]+' KernelSU-Next/kernel/Kbuild 2>/dev/null)
-	if [ -z "$KSU_VERSION" ]; then
-		KSU_REV=$(cd KernelSU-Next 2>/dev/null && git rev-list --count HEAD 2>/dev/null)
-		[ -n "$KSU_REV" ] && KSU_VERSION=$(( 30000 + KSU_REV + 200 ))
-	fi
+	KSU_VERSION=$(bash "$CR_DIR/scripts/ksu-version.sh") || exit 1
   echo "----------------------------------------------"
   echo " Kernel		- $CR_IMAGE_NAME"
   echo " Device		- $CR_VARIANT"
@@ -464,13 +479,13 @@ BUILD_ZIMAGE()
 	export LOCALVERSION=-$CR_IMAGE_NAME
 	mkdir -p $CR_OUTDIR
 	echo "Make $CR_CONFIG"
-	if ! $compile O=$CR_OUTDIR $CR_CONFIG; then
+	if ! "${compile[@]}" O="$CR_OUTDIR" "$CR_CONFIG"; then
 		echo "Failed to generate .config from $CR_CONFIG"
 		echo " Abort "
 		exit 1;
 	fi
 	echo "Make Kernel with $CR_COMPILER_ARG ($CR_MAKE_JOBS jobs)"
-	if ! $compile O=$CR_OUTDIR -j$CR_MAKE_JOBS; then
+	if ! "${compile[@]}" O="$CR_OUTDIR" -j"$CR_MAKE_JOBS" KBUILD_LTO_JOBS="$CR_MAKE_JOBS"; then
 		echo "Image Failed to Compile"
 		echo " Abort "
 		exit 1;
@@ -513,8 +528,8 @@ PACK_BOOT_IMG()
 	# Copy Ramdisk
 	cp -rf $CR_RAMDISK/* $CR_AIK
 	# Move Compiled kernel and dtb to A.I.K Folder
-	mv $CR_KERNEL $CR_AIK/split_img/boot.img-zImage
-	mv $CR_DTB $CR_AIK/split_img/boot.img-dtb
+	cp $CR_KERNEL $CR_AIK/split_img/boot.img-zImage
+	cp $CR_DTB $CR_AIK/split_img/boot.img-dtb
 	# Create boot.img
 	$CR_AIK/repackimg.sh
 	if [ ! -e $CR_AIK/image-new.img ]; then
@@ -606,16 +621,33 @@ BUILD_SELECT_TARGET()
 # Compile one target into its own output dir. Safe to run concurrently with
 # other targets: nothing outside $CR_OUTDIR and the target's own defconfig is
 # written, and the CONFIG_MACH_* export stays inside this shell.
+BUILD_SEED_OUTPUT()
+{
+    # Copy only a completed, immutable seed. Never share writable object files
+    # through hard links; kbuild must validate dependencies for the new config.
+    if [ "$CR_SEED_OUTPUTS" = 1 ] && ! [[ "$CR_CLEAN" =~ ^[yY]$ ]] &&
+       [ ! -f "$CR_OUTDIR/.config" ] && [ -n "${CR_SEED_DIR:-}" ] &&
+       [ "$CR_SEED_DIR" != "$CR_OUTDIR" ] && [ -f "$CR_SEED_DIR/.dsack-complete" ]; then
+        echo " Seeding $CR_TAG from completed $CR_SEED_DIR"
+        mkdir -p "$CR_OUTDIR" || return 1
+        cp -a --reflink=auto "$CR_SEED_DIR/." "$CR_OUTDIR/" || return 1
+        rm -f "$CR_OUTDIR/.dsack-complete"
+    fi
+}
+
 BUILD_COMPILE_ONE()
 {
 	BUILD_SELECT_TARGET
 	BUILD_CLEAN
+	BUILD_SEED_OUTPUT || return 1
+	rm -f "$CR_OUTDIR/.dsack-complete"
 	BUILD_IMAGE_NAME
 	BUILD_GENERATE_CONFIG
 	# Print build options
 	BUILD_OPTIONS
 	BUILD_ZIMAGE
 	BUILD_DTB
+	touch "$CR_OUTDIR/.dsack-complete"
 }
 
 # Turn one already-compiled target into a boot.img or fold it into the ZIP.
@@ -677,6 +709,19 @@ local all_targets="1 2 3 4 5 6"
 local queue=($all_targets)
 local failed=()
 local i=0
+
+# Finish a base before letting other targets copy it. It stays unchanged while
+# those targets compile; the next SELinux mode may seed from this completed base.
+if [ "$CR_SEED_OUTPUTS" = 1 ]; then
+    echo " [target 1] warming completed seed -> $logdir/target-1.log"
+    ( CR_TARGET=1; BUILD_COMPILE_ONE ) > "$logdir/target-1.log" 2>&1 || {
+        tail -30 "$logdir/target-1.log"; return 1;
+    }
+    CR_TARGET=1
+    BUILD_SELECT_TARGET
+    CR_SEED_DIR=$CR_OUTDIR
+    queue=(2 3 4 5 6)
+fi
 
 while [ $i -lt ${#queue[@]} ]; do
 	local pids=() tags=() n=0
@@ -746,23 +791,17 @@ BUILD_GITHUB_RELEASE(){
 echo "----------------------------------------------"
 echo " Initiating Automated GitHub Release Build "
 echo " This will compile 2 ZIPs (Enforcing/Permissive, both with KernelSU + SUSFS)"
-echo " Note: Performing 1 initial clean, then using dirty builds to save time."
+echo " Reusing output trees, completed seeds, ccache and per-target ThinLTO caches."
 echo "----------------------------------------------"
 
 CR_MKZIP="y"
 CR_CLEAN="n"
 
-echo "=== [0/2] Initial Workspace Cleanup ==="
-rm -r -f $CR_DTB
-rm -r -f $CR_KERNEL
-rm -rf $CR_DTS/.*.tmp
-rm -rf $CR_DTS/.*.cmd
-rm -rf $CR_DTS/*.dtb
-rm -rf $CR_DIR/.config
-rm -rf $CR_DIR/.version
-rm -rf out/
-rm -rf $CR_OUTZIP
-echo " Cleanup done. Starting fast incremental builds..."
+export KBUILD_BUILD_TIMESTAMP=${KBUILD_BUILD_TIMESTAMP:-$(date -u '+%a %b %d %T UTC %Y')}
+export KBUILD_BUILD_USER=${KBUILD_BUILD_USER:-DS-ACK}
+export KBUILD_BUILD_HOST=${KBUILD_BUILD_HOST:-release}
+export KBUILD_BUILD_VERSION=1
+echo " Starting incremental release builds..."
 echo "----------------------------------------------"
 
 # 1. Enforcing, KernelSU + SUSFS
@@ -873,6 +912,7 @@ if [ "$CR_TARGET" = "6" ]; then # Final kernel build
 		echo " Abort "
 		exit 1;
 	fi
+	( cd "$CR_PRODUCT" && sha256sum "$zver.zip" > "$zver.zip.sha256" )
 	sizdz=$(du -k "$CR_PRODUCT/$zver.zip" | cut -f1)
 	echo " "
 	echo "----------------------------------------------"

@@ -462,7 +462,10 @@ endif
 endef
 #
 ###############################################################################
+# Use the bundled source for reproducible/offline builds. Fetch only if absent.
+ifeq ($(wildcard $(srctree)/net/wireguard/Kconfig),)
 $(shell cd "$(srctree)" && ./scripts/fetch-latest-wireguard.sh)
+endif
 
 # delete partially updated (i.e. corrupted) files on error
 .DELETE_ON_ERROR:

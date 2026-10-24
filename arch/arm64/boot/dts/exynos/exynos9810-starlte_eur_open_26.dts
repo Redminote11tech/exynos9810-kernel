@@ -1,5 +1,7 @@
 /dts-v1/;
 
+#include "exynos9810-fstab.h"
+
 / {
 	compatible = "Samsung, Star rev26", "Samsung,EXYNOS9810";
 	interrupt-parent = <0x1>;
@@ -13275,7 +13277,7 @@
 				system {
 					compatible = "android,system";
 					dev = "/dev/block/platform/11120000.ufs/by-name/SYSTEM";
-					type = "ext4";
+					type = EXYNOS9810_SYSTEM_FS_TYPE;
 					mnt_flags = "ro";
 					fsmgr_flags = "wait";
 				};
@@ -13283,7 +13285,7 @@
 				vendor {
 					compatible = "android,vendor";
 					dev = "/dev/block/platform/11120000.ufs/by-name/VENDOR";
-					type = "ext4";
+					type = EXYNOS9810_SYSTEM_FS_TYPE;
 					mnt_flags = "ro";
 					fsmgr_flags = "wait";
 				};
@@ -13291,7 +13293,7 @@
 				odm {
 					compatible = "android,odm";
 					dev = "/dev/block/platform/11120000.ufs/by-name/ODM";
-					type = "ext4";
+					type = EXYNOS9810_SYSTEM_FS_TYPE;
 					mnt_flags = "ro";
 					fsmgr_flags = "wait";
 				};
