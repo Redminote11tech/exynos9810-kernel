@@ -57,7 +57,7 @@ def verify(archive, filesystem):
                 else:
                     assert data[:4] == b'DTBH'
                     version, count = struct.unpack_from('<II', data, 4)
-                    assert version == 2 and count > 0
+                    assert version == 2 and count == 1, (variant, 'unexpected DTB count', count)
                     for index in range(count):
                         entry = struct.unpack_from('<8I', data, 12 + 32 * index)
                         props = s9_package.fdt_properties(data[entry[5]:entry[5] + entry[6]])

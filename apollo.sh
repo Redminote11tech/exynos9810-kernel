@@ -475,12 +475,21 @@ BUILD_OUT()
 }
 
 # Kernel Compile Function
+BUILD_SET_LOCALVERSION()
+{
+    # utsrelease is limited to 64 bytes including the base Linux version.
+    # Keep dates in filenames/the build timestamp, not in uname's release.
+    local release="$CR_NAME-$CR_VERSION-$CR_VARIANT-${CR_FS_TYPE^^}"
+    if [ "$CR_SELINUX" = 1 ]; then release=$release-Permissive; fi
+    export LOCALVERSION=-$release-KSU
+}
+
 BUILD_ZIMAGE()
 {
 	echo "----------------------------------------------"
 	echo " "
 	echo "Building zImage for $CR_VARIANT"
-	export LOCALVERSION=-$CR_IMAGE_NAME
+	BUILD_SET_LOCALVERSION
 	mkdir -p $CR_OUTDIR
 	echo "Make $CR_CONFIG"
 	if ! "${compile[@]}" O="$CR_OUTDIR" "$CR_CONFIG"; then
@@ -651,12 +660,39 @@ BUILD_SEED_OUTPUT()
     fi
 }
 
+BUILD_HAS_MODEL_SEEDS()
+{
+    local variant candidate found sel=enforcing
+    [ "$CR_SELINUX" = 1 ] && sel=permissive
+    for variant in G960F G965F N960F G960N G965N N960N; do
+        # An existing output can resume directly without borrowing a seed.
+        [ -f "$CR_OUT_ROOT/$variant-$sel-ksu-$CR_FS_TYPE/.config" ] && continue
+        found=0
+        for candidate in "$CR_OUT_ROOT/$variant-"*-ksu-{erofs,ext4}; do
+            if [ -f "$candidate/.dsack-complete" ]; then found=1; break; fi
+        done
+        [ "$found" = 1 ] || return 1
+    done
+}
+
+BUILD_CLEAN_DTBS()
+{
+    # dtbtool packs every *.dtb it finds. A seeded tree must not carry the
+    # previous device/region's blob into the next model's DTBH container.
+    local boot="$CR_OUTDIR/arch/$CR_ARCH/boot"
+    rm -f "$boot/dtb.img" "$boot/.dtb.img.cmd"
+    if [ -d "$boot/dts" ]; then
+        find "$boot/dts" -type f \( -name '*.dtb' -o -name '.*.dtb.cmd' \) -delete
+    fi
+}
+
 BUILD_COMPILE_ONE()
 {
 	BUILD_SELECT_TARGET
 	BUILD_CLEAN
 	BUILD_SEED_OUTPUT || return 1
 	rm -f "$CR_OUTDIR/.dsack-complete"
+	BUILD_CLEAN_DTBS || return 1
 	BUILD_IMAGE_NAME
 	BUILD_GENERATE_CONFIG
 	# Print build options
@@ -728,7 +764,7 @@ local i=0
 
 # Finish a base before letting other targets copy it. It stays unchanged while
 # those targets compile; the next SELinux mode may seed from this completed base.
-if [ "$CR_SEED_OUTPUTS" = 1 ]; then
+if [ "$CR_SEED_OUTPUTS" = 1 ] && ! BUILD_HAS_MODEL_SEEDS; then
     echo " [target 1] warming completed seed -> $logdir/target-1.log"
     ( CR_TARGET=1; CR_MAKE_JOBS=$CR_JOBS; BUILD_COMPILE_ONE ) > "$logdir/target-1.log" 2>&1 || {
         tail -30 "$logdir/target-1.log"; return 1;
