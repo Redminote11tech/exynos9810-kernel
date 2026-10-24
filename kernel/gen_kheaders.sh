@@ -52,8 +52,11 @@ if [ "${quiet}" != "silent_" ]; then
        echo "  GEN     $tarfile"
 fi
 
-rm -rf $cpio_dir
-mkdir $cpio_dir
+# Header staging creates thousands of small files. Keep it off the build
+# filesystem; each invocation gets an isolated directory and cleans it on error.
+cpio_dir=$(mktemp -d "${TMPDIR:-/tmp}/kheaders.XXXXXX")
+chmod 0755 "$cpio_dir"
+trap 'rm -rf "$cpio_dir"' EXIT
 
 pushd $srctree > /dev/null
 for f in $dir_list;
@@ -67,9 +70,10 @@ for f in $dir_list;
 	do find "$f" -name "*.h";
 done | cpio --quiet -pd $cpio_dir >/dev/null 2>&1
 
-# Remove comments except SDPX lines
+# Remove comments except SPDX lines. Batch files to avoid one Perl process
+# per header and hidden eight-way worker pools in each device build.
 find $cpio_dir -type f -print0 |
-	xargs -0 -P8 -n1 perl -pi -e 'BEGIN {undef $/;}; s/\/\*((?!SPDX).)*?\*\///smg;'
+	xargs -0 -n64 perl -pi -e 'BEGIN {undef $/;}; s/\/\*((?!SPDX).)*?\*\///smg;'
 
 tar -Jcf $tarfile -C $cpio_dir/ . > /dev/null
 
