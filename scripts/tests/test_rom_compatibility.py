@@ -57,7 +57,7 @@ class RomCompatibility(unittest.TestCase):
                            CR_ARCH='arm64', CR_DEFCONFIG=tmp, CR_CONFIG='base',
                            CR_CONFIG_SPLIT='NULL', CR_CONFIG_REGION='region',
                            CR_CONFIG_APOLLO='apollo', CR_NAME='DS-ACK',
-                           CR_VERSION='test', CR_DATE='test')
+                           CR_VERSION='test', CR_DATE='test', CR_DEBUG_INFO='0')
                 script = functions + '''
 BUILD_CLEAN() { :; }
 BUILD_TARGET_ID
@@ -77,6 +77,7 @@ cat "$CR_DEFCONFIG/$CR_TMPCONFIG"
                 self.assertEqual(entries[-1], 'CONFIG_EXYNOS9810_EROFS_FSTAB=y' if filesystem == 'erofs'
                                  else '# CONFIG_EXYNOS9810_EROFS_FSTAB is not set')
                 self.assertIn('CONFIG_KSU_MANUAL_HOOK=y', config)
+                self.assertIn('# CONFIG_DEBUG_INFO is not set', config)
                 self.assertEqual('CONFIG_ALWAYS_PERMISSIVE=y' in config, mode == '1')
         self.assertEqual(len(identities), 24)
 

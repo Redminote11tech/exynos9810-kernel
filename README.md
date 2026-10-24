@@ -83,8 +83,10 @@ release ZIPs for the selected filesystem. EROFS artifacts include `EROFS` in the
 names. `CR_PARALLEL=2` controls simultaneous device builds; logs go to `logs/`.
 Release builds preserve previous outputs and seed new variants from completed
 builds using copy-on-write where supported. Installed `ccache` is used automatically
-with a local 30 GiB limit; ThinLTO caches stay in each output tree. Use
+with a local 30 GB limit; ThinLTO caches stay in each output tree. Use
 `CR_USE_CCACHE=0` or `CR_SEED_OUTPUTS=0` to disable either optimisation.
+Release builds omit full DWARF debug data to reduce linking time; set
+`CR_RELEASE_DEBUG_INFO=1` if you need that host-side debugging information.
 
 For a single-device G960F EROFS test, `python3 scripts/package-s9-erofs-test.py <built-image.img>`
 creates a recovery ZIP that preserves the installed ROM ramdisk and checks the

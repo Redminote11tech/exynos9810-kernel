@@ -66,6 +66,7 @@ CR_JOBS=${CR_JOBS:-$(nproc)}
 CR_PARALLEL=${CR_PARALLEL:-2}
 CR_USE_CCACHE=${CR_USE_CCACHE:-1}
 CR_SEED_OUTPUTS=${CR_SEED_OUTPUTS:-1}
+CR_DEBUG_INFO=${CR_DEBUG_INFO:-1}
 for CR_COUNT in "$CR_JOBS" "$CR_PARALLEL"; do
     [[ "$CR_COUNT" =~ ^[1-9][0-9]*$ ]] || { echo 'Job counts must be positive integers' >&2; exit 1; }
 done
@@ -409,6 +410,9 @@ BUILD_GENERATE_CONFIG()
   # Apollo Custom defconfig
   echo " Apollo	- $CR_CONFIG_APOLLO "
   cat $CR_DEFCONFIG/$CR_CONFIG_APOLLO >> $CR_DEFCONFIG/$CR_TMPCONFIG
+  if [ "$CR_DEBUG_INFO" = 0 ]; then
+    echo "# CONFIG_DEBUG_INFO is not set" >> "$CR_DEFCONFIG/$CR_TMPCONFIG"
+  fi
   if [ "$CR_FS_TYPE" = "erofs" ]; then
     echo "CONFIG_EROFS_FS=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
     echo "CONFIG_EXYNOS9810_EROFS_FSTAB=y" >> $CR_DEFCONFIG/$CR_TMPCONFIG
@@ -623,14 +627,26 @@ BUILD_SELECT_TARGET()
 # written, and the CONFIG_MACH_* export stays inside this shell.
 BUILD_SEED_OUTPUT()
 {
+    local seed=${CR_SEED_DIR:-} candidate sel other_sel other_fs
+    if [ "$CR_SELINUX" = 1 ]; then sel=permissive; other_sel=enforcing;
+    else sel=enforcing; other_sel=permissive; fi
+    if [ "$CR_FS_TYPE" = erofs ]; then other_fs=ext4; else other_fs=erofs; fi
+    # A filesystem switch or the opposite SELinux mode on the same device
+    # usually changes fewer objects than switching to a different device.
+    for candidate in \
+        "$CR_OUT_ROOT/$CR_VARIANT-$sel-ksu-$other_fs" \
+        "$CR_OUT_ROOT/$CR_VARIANT-$other_sel-ksu-$CR_FS_TYPE" \
+        "$CR_OUT_ROOT/$CR_VARIANT-$other_sel-ksu-$other_fs"; do
+        if [ -f "$candidate/.dsack-complete" ]; then seed=$candidate; break; fi
+    done
     # Copy only a completed, immutable seed. Never share writable object files
     # through hard links; kbuild must validate dependencies for the new config.
     if [ "$CR_SEED_OUTPUTS" = 1 ] && ! [[ "$CR_CLEAN" =~ ^[yY]$ ]] &&
-       [ ! -f "$CR_OUTDIR/.config" ] && [ -n "${CR_SEED_DIR:-}" ] &&
-       [ "$CR_SEED_DIR" != "$CR_OUTDIR" ] && [ -f "$CR_SEED_DIR/.dsack-complete" ]; then
-        echo " Seeding $CR_TAG from completed $CR_SEED_DIR"
+       [ ! -f "$CR_OUTDIR/.config" ] && [ -n "$seed" ] &&
+       [ "$seed" != "$CR_OUTDIR" ] && [ -f "$seed/.dsack-complete" ]; then
+        echo " Seeding $CR_TAG from completed $seed"
         mkdir -p "$CR_OUTDIR" || return 1
-        cp -a --reflink=auto "$CR_SEED_DIR/." "$CR_OUTDIR/" || return 1
+        cp -a --reflink=auto "$seed/." "$CR_OUTDIR/" || return 1
         rm -f "$CR_OUTDIR/.dsack-complete"
     fi
 }
@@ -703,7 +719,7 @@ BUILD_COMPILER
 CR_MAKE_JOBS=$(( (CR_JOBS + CR_PARALLEL - 1) / CR_PARALLEL ))
 [ "$CR_MAKE_JOBS" -lt 1 ] && CR_MAKE_JOBS=1
 
-local logdir=$CR_DIR/logs/build-$$
+local logdir=$CR_DIR/logs/build-$CR_FS_TYPE-$CR_SELINUX-$$
 mkdir -p $logdir
 local all_targets="1 2 3 4 5 6"
 local queue=($all_targets)
@@ -714,7 +730,7 @@ local i=0
 # those targets compile; the next SELinux mode may seed from this completed base.
 if [ "$CR_SEED_OUTPUTS" = 1 ]; then
     echo " [target 1] warming completed seed -> $logdir/target-1.log"
-    ( CR_TARGET=1; BUILD_COMPILE_ONE ) > "$logdir/target-1.log" 2>&1 || {
+    ( CR_TARGET=1; CR_MAKE_JOBS=$CR_JOBS; BUILD_COMPILE_ONE ) > "$logdir/target-1.log" 2>&1 || {
         tail -30 "$logdir/target-1.log"; return 1;
     }
     CR_TARGET=1
@@ -796,6 +812,9 @@ echo "----------------------------------------------"
 
 CR_MKZIP="y"
 CR_CLEAN="n"
+# Full DWARF is not carried in the flashable Image. Keep it opt-in for
+# host debugging; omitting it greatly reduces native-link I/O and memory.
+CR_DEBUG_INFO=${CR_RELEASE_DEBUG_INFO:-0}
 
 export KBUILD_BUILD_TIMESTAMP=${KBUILD_BUILD_TIMESTAMP:-$(date -u '+%a %b %d %T UTC %Y')}
 export KBUILD_BUILD_USER=${KBUILD_BUILD_USER:-DS-ACK}
@@ -808,13 +827,13 @@ echo "----------------------------------------------"
 echo "=== [1/2] Building Enforcing - KernelSU ==="
 CR_SELINUX=2
 CR_KSU="y"
-BUILD_ALL
+BUILD_ALL || return 1
 
 # 2. Permissive, KernelSU + SUSFS
 echo "=== [2/2] Building Permissive - KernelSU ==="
 CR_SELINUX=1
 CR_KSU="y"
-BUILD_ALL
+BUILD_ALL || return 1
 
 echo "----------------------------------------------"
 echo " GitHub Release Builds Completed Successfully! "

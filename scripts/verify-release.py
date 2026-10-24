@@ -31,9 +31,11 @@ def verify(archive, filesystem):
         for variant, model in VARIANTS.items():
             output = ROOT / f'out/{variant}-{mode}-ksu-{filesystem}'
             config = (output / '.config').read_text()
-            for flag in ('CONFIG_KSU=y', 'CONFIG_KSU_MANUAL_HOOK=y', 'CONFIG_KSU_SUSFS=y'):
+            for flag in ('CONFIG_KSU=y', 'CONFIG_KSU_MANUAL_HOOK=y', 'CONFIG_KSU_SUSFS=y',
+                         'CONFIG_DECON_EVENT_LOG=y'):
                 assert flag in config, (variant, flag)
             assert ('CONFIG_ALWAYS_PERMISSIVE=y' in config) == (mode == 'permissive')
+            assert '# CONFIG_DEBUG_INFO is not set' in config
             assert ('CONFIG_EXYNOS9810_EROFS_FSTAB=y' in config) == (filesystem == 'erofs')
             hashes = {}
             for kind, filename in (('kernel', 'Image'), ('dtb', 'dtb.img')):
